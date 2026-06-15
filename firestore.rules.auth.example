@@ -1,0 +1,56 @@
+// Auth-based rules for event operation.
+// Admin actions require Firebase Authentication.
+// For stronger production use, restrict admin access to specific UID/email allowlists.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdminByEmail() {
+      return isSignedIn()
+        && request.auth.token.email in [
+          'your-admin-email@example.com'
+        ];
+    }
+
+    function isAdminByDoc() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isAdminByEmail() || isAdminByDoc();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /questions/{questionId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /responses/{responseId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if isAdmin();
+      }
+
+      match /participants/{participantId} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
