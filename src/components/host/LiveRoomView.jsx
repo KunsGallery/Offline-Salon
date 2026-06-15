@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import ParticipantAvatar from './ParticipantAvatar';
 import ResponseNote from './ResponseNote';
 
@@ -6,19 +6,36 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-const ROOM_SLOTS = [
-  { x: 12, y: 20 },
-  { x: 30, y: 10 },
-  { x: 50, y: 8 },
-  { x: 70, y: 12 },
-  { x: 86, y: 24 },
-  { x: 16, y: 58 },
-  { x: 34, y: 70 },
-  { x: 54, y: 74 },
-  { x: 74, y: 68 },
-  { x: 88, y: 52 },
-  { x: 18, y: 34 },
-  { x: 82, y: 36 },
+const ROOM_SLOTS_BY_COUNT = {
+  1: [{ x: 50, y: 66 }],
+  2: [
+    { x: 36, y: 58 },
+    { x: 64, y: 58 },
+  ],
+  3: [
+    { x: 32, y: 58 },
+    { x: 68, y: 58 },
+    { x: 50, y: 74 },
+  ],
+  4: [
+    { x: 28, y: 54 },
+    { x: 72, y: 54 },
+    { x: 38, y: 74 },
+    { x: 62, y: 74 },
+  ],
+};
+
+const ROOM_SLOTS_DEFAULT = [
+  { x: 28, y: 54 },
+  { x: 72, y: 54 },
+  { x: 38, y: 74 },
+  { x: 62, y: 74 },
+  { x: 20, y: 66 },
+  { x: 80, y: 66 },
+  { x: 34, y: 42 },
+  { x: 66, y: 42 },
+  { x: 50, y: 82 },
+  { x: 50, y: 46 },
 ];
 
 function getResponseParticipant(response, participants) {
@@ -34,52 +51,32 @@ function getResponseParticipant(response, participants) {
   );
 }
 
+function getCreatedTime(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 export default function LiveRoomView({ question, responses = [], participants = [], session, likeEffects = [] }) {
-  const slotMapRef = useRef({});
-  const activeResponses = useMemo(
+  const visibleResponses = useMemo(() => [...responses].filter((response) => response.hidden !== true), [responses]);
+  const stableResponses = useMemo(
     () =>
-      [...responses]
-        .filter((response) => response.hidden !== true)
-        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0) || String(a.id).localeCompare(String(b.id))),
-    [responses],
+      [...visibleResponses].sort(
+        (a, b) => getCreatedTime(a.createdAt) - getCreatedTime(b.createdAt) || String(a.id).localeCompare(String(b.id)),
+      ),
+    [visibleResponses],
   );
-  const responseDeck = useMemo(() => {
-    const nextSlotMap = slotMapRef.current;
-    const activeIds = new Set(activeResponses.map((response) => response.id));
-
-    Object.keys(nextSlotMap).forEach((responseId) => {
-      if (!activeIds.has(responseId)) {
-        delete nextSlotMap[responseId];
-      }
-    });
-
-    const occupied = new Set(Object.values(nextSlotMap));
-
-    activeResponses.forEach((response) => {
-      if (nextSlotMap[response.id] === undefined) {
-        let slotIndex = 0;
-        while (occupied.has(slotIndex) && slotIndex < ROOM_SLOTS.length) {
-          slotIndex += 1;
-        }
-        if (slotIndex >= ROOM_SLOTS.length) {
-          slotIndex = Object.keys(nextSlotMap).length % ROOM_SLOTS.length;
-        }
-        nextSlotMap[response.id] = slotIndex;
-        occupied.add(slotIndex);
-      }
-    });
-
-    return activeResponses.map((response) => {
-      const slot = ROOM_SLOTS[nextSlotMap[response.id] % ROOM_SLOTS.length];
-      return {
+  const slots = useMemo(() => ROOM_SLOTS_BY_COUNT[stableResponses.length] || ROOM_SLOTS_DEFAULT, [stableResponses.length]);
+  const positionedResponses = useMemo(
+    () =>
+      stableResponses.map((response, index) => ({
         response,
-        slot,
+        slot: slots[index % slots.length],
         participant: getResponseParticipant(response, participants),
-      };
-    });
-  }, [activeResponses, participants]);
-  const totalLikes = activeResponses.reduce((sum, response) => sum + (response.likes || 0), 0);
-  const overflowCount = Math.max(0, activeResponses.length - ROOM_SLOTS.length);
+      })),
+    [participants, slots, stableResponses],
+  );
+  const totalLikes = stableResponses.reduce((sum, response) => sum + (response.likes || 0), 0);
+  const overflowCount = Math.max(0, stableResponses.length - slots.length);
   const activeLikeIds = useMemo(() => new Set(likeEffects.map((effect) => effect.responseId)), [likeEffects]);
   const latestLikeTokenById = useMemo(
     () =>
@@ -110,7 +107,7 @@ export default function LiveRoomView({ question, responses = [], participants = 
           </p>
         </div>
         <div className="row wrap gap-sm live-room-stats">
-          <span className="badge">응답 {activeResponses.length}</span>
+          <span className="badge">응답 {stableResponses.length}</span>
           <span className="badge">좋아요 {totalLikes}</span>
           <span className="badge">참여자 {participants.length}</span>
           <span className={`badge status-${session?.status || 'draft'}`}>{session?.status || 'draft'}</span>
@@ -135,20 +132,20 @@ export default function LiveRoomView({ question, responses = [], participants = 
         </div>
 
         <div className="note-ring">
-          {responseDeck.length === 0 ? (
+          {positionedResponses.length === 0 ? (
             <div className="response-empty">
               <p className="eyebrow">MEMO BOARD</p>
               <h3>첫 답변이 올라오면 여기서 살아납니다.</h3>
               <p className="muted">참여자들의 짧은 메모가 테이블 주변에 쌓입니다.</p>
             </div>
           ) : (
-            responseDeck.map(({ response, slot, participant }, index) => {
+            positionedResponses.map(({ response, slot, participant }, index) => {
               const displayNickname = participant.nickname || participant.name || response.nickname || '익명';
               const reactionToken = latestLikeTokenById[response.id] || 'stable';
               return (
                 <div
                   key={`${response.id}:${reactionToken}`}
-                  className="seat-cluster note-slot-item"
+                  className="live-room-seat seat-cluster note-slot-item"
                   style={{
                     '--slot-x': `${slot.x}%`,
                     '--slot-y': `${slot.y}%`,
