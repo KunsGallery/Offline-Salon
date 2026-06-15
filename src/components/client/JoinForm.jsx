@@ -9,7 +9,7 @@ export default function JoinForm({ session, onJoin, loading, allowNickname = tru
   };
 
   return (
-    <form className="client-panel stack" onSubmit={submit}>
+    <form className="client-panel stack join-form" onSubmit={submit}>
       <div className="stack gap-sm">
         <p className="eyebrow">JOIN SESSION</p>
         <h1>{session?.title || '세션에 참여합니다'}</h1>
@@ -31,8 +31,8 @@ export default function JoinForm({ session, onJoin, loading, allowNickname = tru
         <p className="muted">이 세션은 닉네임 없이 참여할 수 있습니다.</p>
       )}
 
-      <button className="btn primary large-btn" type="submit" disabled={loading}>
-        {loading ? '입장 중...' : '참여 시작'}
+      <button className="btn primary large-btn join-submit-button" type="submit" disabled={loading}>
+        {loading ? '입장 중...' : '다음'}
       </button>
     </form>
   );

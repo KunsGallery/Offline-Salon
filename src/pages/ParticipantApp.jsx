@@ -36,9 +36,16 @@ export default function ParticipantApp() {
   const { sessionId } = useParams();
   const { session, loading: sessionLoading, error: sessionError } = useSession(sessionId);
   const { questions, loading: questionsLoading, error: questionsError } = useQuestions(sessionId);
+  const questionPool = useMemo(() => {
+    const sessionQuestions = Array.isArray(session?.questions) ? session.questions : [];
+    return questions.length > 0 ? questions : sessionQuestions;
+  }, [questions, session?.questions]);
   const currentQuestion = useMemo(
-    () => questions.find((question) => question.id === session?.currentQuestionId) || questions.find((question) => question.isActive) || null,
-    [questions, session?.currentQuestionId],
+    () =>
+      questionPool.find((question) => String(question.id) === String(session?.currentQuestionId)) ||
+      questionPool.find((question) => question.isActive === true) ||
+      null,
+    [questionPool, session?.currentQuestionId],
   );
 
   const [participantId, setParticipantId] = useState(() => readStoredValue(storageKey(sessionId, 'participantId')));
@@ -69,6 +76,20 @@ export default function ParticipantApp() {
   const realtimeLoading = sessionLoading || questionsLoading || responsesLoading;
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log('[ParticipantApp]', {
+      sessionId,
+      session,
+      currentQuestionId: session?.currentQuestionId,
+      questionCount: questionPool.length,
+      currentQuestion: currentQuestion?.id,
+      hasParticipantId: Boolean(participantId),
+      hasNickname: Boolean(nickname),
+      responseCount: responses.length,
+    });
+  }, [currentQuestion?.id, nickname, participantId, questionPool.length, responses.length, session, sessionId]);
+
+  useEffect(() => {
     setIsEditing(false);
     setDraftValue('');
   }, [currentQuestion?.id]);
@@ -90,7 +111,7 @@ export default function ParticipantApp() {
 
   if (realtimeError) {
     return (
-      <main className="mobile-shell client-room-shell">
+      <main className="mobile-shell client-room-shell client-page">
         <section className="client-panel stack gap-lg">
           <RealtimeStatusBanner loading={realtimeLoading} error={realtimeError} />
           <div className="stack gap-xs">
@@ -104,7 +125,7 @@ export default function ParticipantApp() {
 
   if (realtimeLoading && session === undefined) {
     return (
-      <main className="mobile-shell client-room-shell">
+      <main className="mobile-shell client-room-shell client-page">
         <section className="client-panel stack gap-lg">
           <RealtimeStatusBanner loading={realtimeLoading} />
           <h1>세션을 불러오는 중입니다.</h1>
@@ -115,7 +136,7 @@ export default function ParticipantApp() {
 
   if (!session) {
     return (
-      <main className="mobile-shell client-room-shell">
+      <main className="mobile-shell client-room-shell client-page">
         <div className="client-panel stack gap-lg">
           <RealtimeStatusBanner loading={realtimeLoading} />
           <h1>세션을 찾을 수 없습니다.</h1>
@@ -132,7 +153,7 @@ export default function ParticipantApp() {
 
   if (session.status === 'ended') {
     return (
-      <main className="mobile-shell client-room-shell" style={accentStyle}>
+      <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
         <WaitingScreen title="세션이 종료되었습니다" message="참여해 주셔서 감사합니다." />
       </main>
     );
@@ -210,7 +231,7 @@ export default function ParticipantApp() {
 
   if (!participantId || !nickname) {
     return (
-      <main className="mobile-shell client-room-shell" style={accentStyle}>
+      <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
         <JoinForm session={session} onJoin={handleJoin} loading={isJoining} allowNickname={session.allowNickname} />
       </main>
     );
@@ -218,14 +239,14 @@ export default function ParticipantApp() {
 
   if (!currentQuestion) {
     return (
-      <main className="mobile-shell client-room-shell" style={accentStyle}>
-        <WaitingScreen title="대기 중" message="관리자가 질문을 시작하면 자동으로 전환됩니다." />
+      <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
+        <WaitingScreen title="아직 활성화된 질문이 없습니다." message="관리자가 질문을 시작하면 자동으로 전환됩니다." />
       </main>
     );
   }
 
   return (
-    <main className="mobile-shell client-room-shell" style={accentStyle}>
+    <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
       <section className="client-panel stack gap-xl client-room">
         <header className="client-room-header">
           <div className="stack gap-xs">
@@ -317,6 +338,18 @@ export default function ParticipantApp() {
           </div>
         )}
         {actionError ? <p className="error-text">{actionError}</p> : null}
+        {import.meta.env.DEV ? (
+          <pre className="debug-box">{JSON.stringify({
+            sessionId,
+            hasSession: Boolean(session),
+            hasJoined: Boolean(participantId && nickname),
+            nickname,
+            currentQuestionId: session?.currentQuestionId || null,
+            questionCount: questionPool.length,
+            currentQuestion: currentQuestion?.id || null,
+            responseCount: responses.length,
+          }, null, 2)}</pre>
+        ) : null}
       </section>
     </main>
   );

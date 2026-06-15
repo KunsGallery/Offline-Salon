@@ -28,12 +28,13 @@ export default function QuestionAnswerForm({
 
   if (!question) return null;
 
-  const isChoice = question.type === 'poll' || question.type === 'ranking';
+  const type = question?.type || 'text';
+  const isChoice = (type === 'poll' || type === 'ranking') && options.length > 0;
 
   return (
-    <form className="client-panel stack" onSubmit={submit}>
+    <form className="client-panel stack answer-form" onSubmit={submit}>
       <div className="stack gap-xs">
-        <p className="eyebrow">{question.type}</p>
+        <p className="eyebrow">{type}</p>
         <h1>{question.title}</h1>
         {question.description ? <p className="muted">{question.description}</p> : null}
       </div>
@@ -49,20 +50,20 @@ export default function QuestionAnswerForm({
         </div>
       ) : (
         <label className="field">
-          <span>{question.type === 'wordcloud' ? '짧은 단어' : '답변'}</span>
+          <span>{type === 'wordcloud' ? '짧은 단어' : '답변'}</span>
           <textarea
             className="textarea large"
-            rows={question.type === 'wordcloud' ? 3 : 6}
+            rows={type === 'wordcloud' ? 3 : 6}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={question.type === 'wordcloud' ? '한 단어 또는 짧은 문장' : '답변을 입력해 주세요'}
+            placeholder={type === 'wordcloud' ? '한 단어 또는 짧은 문장' : '답변을 입력해 주세요'}
           />
         </label>
       )}
 
       <div className="row wrap gap-sm">
         <button
-          className="btn primary large-btn"
+          className="btn primary large-btn answer-submit-button"
           type="submit"
           disabled={busy || (!isChoice && !String(value).trim()) || (isChoice && !String(value).trim())}
         >
