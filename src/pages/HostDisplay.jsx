@@ -1,24 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import HostShell from '../components/host/HostShell';
 import QRJoinCard from '../components/host/QRJoinCard';
-import PollChartView from '../components/host/PollChartView';
-import RankingView from '../components/host/RankingView';
-import TextWallView from '../components/host/TextWallView';
-import WordCloudView from '../components/host/WordCloudView';
+import LiveRoomView from '../components/host/LiveRoomView';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
-
-function countByValue(responses) {
-  return responses.reduce((accumulator, response) => {
-    const key = Array.isArray(response.value) ? response.value.join('|') : response.value;
-    accumulator[key] = (accumulator[key] || 0) + 1;
-    return accumulator;
-  }, {});
-}
 
 export default function HostDisplay() {
   const { sessionId } = useParams();
@@ -34,9 +23,42 @@ export default function HostDisplay() {
     loading: responsesLoading,
     error: responsesError,
   } = useResponses(sessionId, activeQuestion?.id || null);
-  const visibleResponses = responses.filter((response) => !response.hidden);
+  const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
+  const [likeEffects, setLikeEffects] = useState([]);
+  const previousLikesRef = useRef({});
+
   const realtimeError = sessionError || questionsError || participantsError || responsesError;
   const realtimeLoading = sessionLoading || questionsLoading || participantsLoading || responsesLoading;
+
+  useEffect(() => {
+    previousLikesRef.current = {};
+    setLikeEffects([]);
+  }, [activeQuestion?.id]);
+
+  useEffect(() => {
+    if (!activeQuestion?.id) return;
+    if (Object.keys(previousLikesRef.current).length === 0) {
+      previousLikesRef.current = Object.fromEntries(visibleResponses.map((response) => [response.id, response.likes || 0]));
+      return;
+    }
+
+    const nextSnapshot = {};
+    visibleResponses.forEach((response) => {
+      const prev = previousLikesRef.current[response.id] || 0;
+      const next = response.likes || 0;
+
+      if (next > prev) {
+        const token = `${response.id}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        setLikeEffects((current) => [...current, { token, responseId: response.id, burstCount: next - prev }]);
+        window.setTimeout(() => {
+          setLikeEffects((current) => current.filter((effect) => effect.token !== token));
+        }, 1500);
+      }
+
+      nextSnapshot[response.id] = next;
+    });
+    previousLikesRef.current = nextSnapshot;
+  }, [activeQuestion?.id, visibleResponses]);
 
   if (realtimeError) {
     return (
@@ -75,8 +97,6 @@ export default function HostDisplay() {
     );
   }
 
-  const counts = countByValue(visibleResponses);
-
   return (
     <HostShell
       session={session}
@@ -88,37 +108,13 @@ export default function HostDisplay() {
         </>
       }
     >
-      <section className="host-main panel">
-        <div className="stack gap-xs">
-          <p className="eyebrow">현재 질문</p>
-          <h2>{activeQuestion?.title || '잠시 후 질문이 시작됩니다.'}</h2>
-          <p className="muted">{activeQuestion?.description || '관리자가 질문을 선택하면 여기에 표시됩니다.'}</p>
-        </div>
-
-        {session.status === 'ended' ? (
-          <div className="center-screen host-placeholder">
-            <h3>참여해주셔서 감사합니다.</h3>
-          </div>
-        ) : !activeQuestion ? (
-          <div className="center-screen host-placeholder">
-            <h3>잠시 후 질문이 시작됩니다.</h3>
-            <p className="muted">관리자가 질문을 활성화하면 참여 안내가 나타납니다.</p>
-          </div>
-        ) : session.showResults ? (
-          <>
-            {activeQuestion.type === 'wordcloud' ? <WordCloudView responses={visibleResponses} /> : null}
-            {activeQuestion.type === 'poll' ? <PollChartView options={activeQuestion.options || []} counts={counts} /> : null}
-            {activeQuestion.type === 'ranking' ? <RankingView options={activeQuestion.options || []} counts={counts} /> : null}
-            {activeQuestion.type === 'text' ? <TextWallView responses={visibleResponses} /> : null}
-          </>
-        ) : (
-          <div className="center-screen host-placeholder collecting">
-            <h3>답변 수집 중</h3>
-            <p className="muted">결과는 관리자가 공개할 때 보여집니다.</p>
-            <span className="badge">응답 {visibleResponses.length}</span>
-          </div>
-        )}
-      </section>
+      <LiveRoomView
+        question={activeQuestion}
+        responses={visibleResponses}
+        participants={participants}
+        session={session}
+        likeEffects={likeEffects}
+      />
 
       <aside className="host-aside stack gap-lg">
         <section className="panel">

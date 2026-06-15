@@ -36,6 +36,9 @@ npm run build
 
 이 규칙은 링크를 아는 모든 사람이 세션/질문/응답 데이터를 수정할 수 있으므로, 실제 공개 운영 전에는 관리자 인증과 권한 분리가 필요합니다.
 
+현재 참여자 좋아요/수정 기능은 비로그인 참여자를 기준으로 하므로, `participantId`는 브라우저 `localStorage` 기반입니다.
+공개 대규모 운영에서는 익명 Auth 또는 세션 토큰 기반 검증으로 보강해야 합니다.
+
 ## 권한 구조
 
 Public Read:
@@ -45,6 +48,8 @@ Public Read:
 Public Write:
 - Participant response create
 - Participant lastSeen update
+- Participant own-response update
+- Participant response like toggle
 
 Admin Only:
 - session create/update/delete
@@ -78,7 +83,8 @@ Admin Only:
 3. 모바일에서 `/client/:sessionId` 열기
 4. 모바일에서 닉네임 입력
 5. 답변 제출
-6. Admin과 Host에 즉시 반영되는지 확인
+6. 다른 모바일에서 같은 질문에 좋아요를 눌러 Host에 반짝임이 표시되는지 확인
+7. Admin과 Host에 즉시 반영되는지 확인
 
 ### 테스트 4 - 결과 공개/숨김
 1. Admin에서 `결과 공개` OFF
@@ -92,6 +98,13 @@ Admin Only:
 3. Host에서 해당 답변이 사라지는지 확인
 4. Admin에서 복원
 5. Host에 다시 표시되는지 확인
+
+### 테스트 6 - 답변 수정
+1. 참여자가 답변 제출
+2. Client에서 수정하기 버튼 클릭
+3. 기존 답변이 입력 폼으로 돌아오는지 확인
+4. 수정 후 제출
+5. Host와 Admin에 같은 response 문서가 실시간으로 갱신되는지 확인
 
 ## 관리자 로그인 설정
 

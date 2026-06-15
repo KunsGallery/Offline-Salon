@@ -38,6 +38,7 @@ service cloud.firestore {
       match /responses/{responseId} {
         allow read: if true;
         allow create: if true;
+        // Participant likes/edit require a relaxed rule or Anonymous Auth strategy.
         allow update, delete: if isAdmin();
       }
 

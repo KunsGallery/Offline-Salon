@@ -216,6 +216,46 @@ function updateResponseState(sessionId, responseId, patch) {
   return cloneResponse(response);
 }
 
+function updateOwnResponseState(sessionId, responseId, participantId, patch = {}) {
+  const session = ensureSession(sessionId);
+  const response = session.responses.find((item) => item.id === responseId);
+  if (!response) return null;
+  if (response.participantId !== participantId) {
+    throw new Error('Cannot edit another participant response.');
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'value')) {
+    response.value = patch.value;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'nickname')) {
+    response.nickname = patch.nickname;
+  }
+  response.updatedAt = nowIso();
+  session.updatedAt = nowIso();
+  normalizeSessionState(session);
+  return cloneResponse(response);
+}
+
+function toggleResponseLikeState(sessionId, responseId, participantId) {
+  const session = ensureSession(sessionId);
+  const response = session.responses.find((item) => item.id === responseId);
+  if (!response) return null;
+  const likedBy = { ...(response.likedBy || {}) };
+  if (response.participantId === participantId) {
+    return cloneResponse(response);
+  }
+  if (likedBy[participantId]) {
+    delete likedBy[participantId];
+  } else {
+    likedBy[participantId] = true;
+  }
+  response.likedBy = likedBy;
+  response.likes = Object.keys(likedBy).length;
+  response.updatedAt = nowIso();
+  session.updatedAt = nowIso();
+  normalizeSessionState(session);
+  return cloneResponse(response);
+}
+
 const localAdapter = {
   getSession(sessionId) {
     return readSession(sessionId);
@@ -376,13 +416,26 @@ const localAdapter = {
       nickname: input.nickname || null,
       value: input.value,
       hidden: false,
+      likes: 0,
+      likedBy: {},
       createdAt: nowIso(),
+      updatedAt: nowIso(),
     });
 
     if (session.allowMultipleSubmissions) {
       session.responses.unshift(response);
     } else if (duplicateIndex >= 0) {
-      session.responses[duplicateIndex] = { ...session.responses[duplicateIndex], ...response, id: session.responses[duplicateIndex].id };
+      const existing = session.responses[duplicateIndex];
+      session.responses[duplicateIndex] = {
+        ...existing,
+        ...response,
+        id: existing.id,
+        hidden: existing.hidden,
+        likes: existing.likes || 0,
+        likedBy: { ...(existing.likedBy || {}) },
+        createdAt: existing.createdAt,
+        updatedAt: nowIso(),
+      };
     } else {
       session.responses.unshift(response);
     }
@@ -395,6 +448,18 @@ const localAdapter = {
 
   updateResponse(sessionId, responseId, patch) {
     const response = updateResponseState(sessionId, responseId, patch);
+    broadcast(sessionId);
+    return response;
+  },
+
+  updateOwnResponse(sessionId, responseId, participantId, patch = {}) {
+    const response = updateOwnResponseState(sessionId, responseId, participantId, patch);
+    broadcast(sessionId);
+    return response;
+  },
+
+  toggleResponseLike(sessionId, responseId, participantId) {
+    const response = toggleResponseLikeState(sessionId, responseId, participantId);
     broadcast(sessionId);
     return response;
   },

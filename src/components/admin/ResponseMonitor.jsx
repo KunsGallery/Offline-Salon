@@ -55,6 +55,7 @@ export default function ResponseMonitor({ session, responses, activeQuestion }) 
                   <div className="row wrap gap-sm align-center">
                     <strong>{response.nickname || '익명'}</strong>
                     <span className="badge">{formatCompactTime(response.createdAt)}</span>
+                    <span className="badge">♥ {response.likes || 0}</span>
                   </div>
                   <p>{safeJoin(response.value)}</p>
                 </div>

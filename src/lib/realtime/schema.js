@@ -14,6 +14,7 @@ export function cloneQuestion(question) {
 export function cloneResponse(response) {
   return {
     ...response,
+    likedBy: { ...(response.likedBy || {}) },
     value: Array.isArray(response.value) ? [...response.value] : response.value,
   };
 }
@@ -50,6 +51,12 @@ export function sortByLastSeenDesc(a, b) {
   return new Date(b.lastSeenAt) - new Date(a.lastSeenAt);
 }
 
+export function countResponseLikes(response) {
+  if (!response) return 0;
+  if (typeof response.likes === 'number' && response.likes >= 0) return response.likes;
+  return Object.keys(response.likedBy || {}).length;
+}
+
 export function sanitizeSession(session) {
   if (!session) return null;
   const next = cloneSession(session);
@@ -81,6 +88,10 @@ export function normalizeQuestion(question) {
 
 export function normalizeResponse(response) {
   if (!response) return null;
+  const likedBy = Object.fromEntries(
+    Object.entries(response.likedBy || {}).filter(([, value]) => Boolean(value)),
+  );
+  const likes = typeof response.likes === 'number' ? response.likes : Object.keys(likedBy).length;
   return cloneResponse({
     id: response.id,
     questionId: response.questionId || '',
@@ -88,7 +99,10 @@ export function normalizeResponse(response) {
     nickname: response.nickname ?? null,
     value: Array.isArray(response.value) ? [...response.value] : response.value ?? '',
     hidden: Boolean(response.hidden),
+    likes,
+    likedBy,
     createdAt: response.createdAt || nowIso(),
+    updatedAt: response.updatedAt || response.createdAt || nowIso(),
   });
 }
 
@@ -219,4 +233,3 @@ export function createSessionTemplate(input = {}) {
     participants: {},
   });
 }
-

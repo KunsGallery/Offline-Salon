@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-export default function QuestionAnswerForm({ question, onSubmit, initialValue = '' }) {
+export default function QuestionAnswerForm({
+  question,
+  onSubmit,
+  initialValue = '',
+  submitLabel = '답변 제출',
+  onCancel = null,
+  cancelLabel = '취소',
+}) {
   const [value, setValue] = useState(initialValue);
   const [busy, setBusy] = useState(false);
   const options = useMemo(() => question?.options || [], [question]);
@@ -53,13 +60,20 @@ export default function QuestionAnswerForm({ question, onSubmit, initialValue = 
         </label>
       )}
 
-      <button
-        className="btn primary large-btn"
-        type="submit"
-        disabled={busy || (!isChoice && !String(value).trim()) || (isChoice && !String(value).trim())}
-      >
-        {busy ? '제출 중...' : '답변 제출'}
-      </button>
+      <div className="row wrap gap-sm">
+        <button
+          className="btn primary large-btn"
+          type="submit"
+          disabled={busy || (!isChoice && !String(value).trim()) || (isChoice && !String(value).trim())}
+        >
+          {busy ? '제출 중...' : submitLabel}
+        </button>
+        {onCancel ? (
+          <button className="btn ghost large-btn" type="button" onClick={onCancel} disabled={busy}>
+            {cancelLabel}
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

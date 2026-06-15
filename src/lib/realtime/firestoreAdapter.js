@@ -8,6 +8,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -99,7 +100,10 @@ function fromResponseDoc(id, data) {
     nickname: data.nickname,
     value: data.value,
     hidden: data.hidden,
+    likes: data.likes,
+    likedBy: data.likedBy || {},
     createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt || data.createdAt),
   });
 }
 
@@ -429,16 +433,21 @@ const firestoreAdapter = {
       participantId: input.participantId,
       nickname: input.nickname || null,
       value: input.value,
-      hidden: false,
-      createdAt: serverTimestamp(),
+      hidden: existing[0]?.hidden ?? false,
+      likes: existing[0]?.likes ?? 0,
+      likedBy: existing[0]?.likedBy || {},
+      createdAt: existing[0]?.createdAt ? existing[0].createdAt : serverTimestamp(),
+      updatedAt: serverTimestamp(),
     };
 
     if (existing[0] && !(session?.allowMultipleSubmissions ?? false)) {
-      await setDoc(existing[0].ref, payload, { merge: true });
+      await setDoc(doc(responsesCol(sessionId), existing[0].id), payload, { merge: true });
       return normalizeResponse({
+        ...existing[0],
         ...payload,
         id: existing[0].id,
-        createdAt: new Date().toISOString(),
+        createdAt: existing[0].createdAt,
+        updatedAt: new Date().toISOString(),
       });
     }
 
@@ -447,6 +456,7 @@ const firestoreAdapter = {
       ...payload,
       id: created.id,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
   },
 
@@ -454,6 +464,67 @@ const firestoreAdapter = {
     requireAdminWrite();
     await updateDoc(doc(responsesCol(sessionId), responseId), {
       ...patch,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  async updateOwnResponse(sessionId, responseId, participantId, patch = {}) {
+    const responseRef = doc(responsesCol(sessionId), responseId);
+    await runTransaction(ensureDb(), async (transaction) => {
+      const snap = await transaction.get(responseRef);
+      if (!snap.exists()) {
+        throw new Error(`Response not found: ${responseId}`);
+      }
+      const data = snap.data();
+      if (data.participantId !== participantId) {
+        throw new Error('Cannot edit another participant response.');
+      }
+      const nextPatch = {};
+      if (Object.prototype.hasOwnProperty.call(patch, 'value')) nextPatch.value = patch.value;
+      if (Object.prototype.hasOwnProperty.call(patch, 'nickname')) nextPatch.nickname = patch.nickname;
+      transaction.update(responseRef, {
+        ...nextPatch,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async toggleResponseLike(sessionId, responseId, participantId) {
+    const responseRef = doc(responsesCol(sessionId), responseId);
+    return runTransaction(ensureDb(), async (transaction) => {
+      const snap = await transaction.get(responseRef);
+      if (!snap.exists()) {
+        throw new Error(`Response not found: ${responseId}`);
+      }
+      const data = snap.data();
+      if (data.participantId === participantId) {
+        return normalizeResponse({
+          id: snap.id,
+          ...data,
+          createdAt: toIso(data.createdAt),
+          updatedAt: toIso(data.updatedAt || data.createdAt),
+        });
+      }
+      const likedBy = { ...(data.likedBy || {}) };
+      if (likedBy[participantId]) {
+        delete likedBy[participantId];
+      } else {
+        likedBy[participantId] = true;
+      }
+      const likes = Object.keys(likedBy).length;
+      transaction.update(responseRef, {
+        likedBy,
+        likes,
+        updatedAt: serverTimestamp(),
+      });
+      return normalizeResponse({
+        id: snap.id,
+        ...data,
+        likedBy,
+        likes,
+        createdAt: toIso(data.createdAt),
+        updatedAt: new Date().toISOString(),
+      });
     });
   },
 
