@@ -81,6 +81,14 @@ export default function LiveRoomView({ question, responses = [], participants = 
   const totalLikes = activeResponses.reduce((sum, response) => sum + (response.likes || 0), 0);
   const overflowCount = Math.max(0, activeResponses.length - ROOM_SLOTS.length);
   const activeLikeIds = useMemo(() => new Set(likeEffects.map((effect) => effect.responseId)), [likeEffects]);
+  const latestLikeTokenById = useMemo(
+    () =>
+      likeEffects.reduce((accumulator, effect) => {
+        accumulator[effect.responseId] = effect.token;
+        return accumulator;
+      }, {}),
+    [likeEffects],
+  );
   const burstById = useMemo(
     () =>
       likeEffects.reduce((accumulator, effect) => {
@@ -136,9 +144,10 @@ export default function LiveRoomView({ question, responses = [], participants = 
           ) : (
             responseDeck.map(({ response, slot, participant }, index) => {
               const displayNickname = participant.nickname || participant.name || response.nickname || '익명';
+              const reactionToken = latestLikeTokenById[response.id] || 'stable';
               return (
                 <div
-                  key={response.id}
+                  key={`${response.id}:${reactionToken}`}
                   className="seat-cluster note-slot-item"
                   style={{
                     '--slot-x': `${slot.x}%`,
@@ -154,6 +163,7 @@ export default function LiveRoomView({ question, responses = [], participants = 
                     emphasis={false}
                     highlighted={activeLikeIds.has(response.id)}
                     popular={(response.likes || 0) >= 3}
+                    reactionToken={reactionToken}
                   />
                   <div className="seat-cluster-person">
                     <ParticipantAvatar

@@ -12,6 +12,7 @@ export default function ResponseNote({
   highlighted = false,
   popular = false,
   busy = false,
+  reactionToken = '',
 }) {
   const likeCount = response?.likes ?? Object.keys(response?.likedBy || {}).length;
   const likedByMe = Boolean(response?.likedBy?.[participantId]);
@@ -28,6 +29,7 @@ export default function ResponseNote({
         highlighted ? 'is-liked-now' : '',
         popular ? 'popular' : '',
       ].join(' ')}
+      data-reaction-token={reactionToken || undefined}
     >
       {burstCount > 0 ? <LikeBurst count={burstCount} /> : null}
       <header className="response-note-meta">
