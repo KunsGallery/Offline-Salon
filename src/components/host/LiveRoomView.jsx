@@ -6,23 +6,6 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function buildRingLayout(items, radiusX, radiusY, offset = -Math.PI / 2) {
-  const total = items.length || 1;
-  return items.map((item, index) => {
-    const angle = offset + (index / total) * Math.PI * 2;
-    const x = Math.cos(angle) * radiusX;
-    const y = Math.sin(angle) * radiusY;
-    return {
-      ...item,
-      style: {
-        '--ring-x': `${x}px`,
-        '--ring-y': `${y}px`,
-        '--ring-rotate': `${Math.round((index / total) * 16) - 8}deg`,
-      },
-    };
-  });
-}
-
 const ROOM_SLOTS = [
   { x: 12, y: 20 },
   { x: 30, y: 10 },
@@ -38,12 +21,17 @@ const ROOM_SLOTS = [
   { x: 82, y: 36 },
 ];
 
-function getDisplayNickname(response, participants) {
+function getResponseParticipant(response, participants) {
   const participant = participants.find(
     (item) => String(item.id || item.participantId) === String(response.participantId),
   );
 
-  return response.nickname || participant?.nickname || participant?.name || '익명';
+  return (
+    participant || {
+      participantId: response.participantId,
+      nickname: response.nickname || '익명',
+    }
+  );
 }
 
 export default function LiveRoomView({ question, responses = [], participants = [], session, likeEffects = [] }) {
@@ -86,10 +74,10 @@ export default function LiveRoomView({ question, responses = [], participants = 
       return {
         response,
         slot,
+        participant: getResponseParticipant(response, participants),
       };
     });
-  }, [activeResponses]);
-  const avatarRing = useMemo(() => buildRingLayout(participants.slice(0, 8), 340, 210, -Math.PI / 3), [participants]);
+  }, [activeResponses, participants]);
   const totalLikes = activeResponses.reduce((sum, response) => sum + (response.likes || 0), 0);
   const overflowCount = Math.max(0, activeResponses.length - ROOM_SLOTS.length);
   const activeLikeIds = useMemo(() => new Set(likeEffects.map((effect) => effect.responseId)), [likeEffects]);
@@ -138,28 +126,6 @@ export default function LiveRoomView({ question, responses = [], participants = 
           </div>
         </div>
 
-        <div className="avatar-ring" aria-hidden="true">
-          {avatarRing.length === 0 ? (
-            <div className="empty-chair-row">
-              {Array.from({ length: 4 }, (_, index) => (
-                <span key={index} className="empty-chair" />
-              ))}
-            </div>
-          ) : (
-            avatarRing.map((participant, index) => (
-              <div key={participant.participantId} className="ring-item avatar-item" style={participant.style}>
-                <ParticipantAvatar
-                  participant={participant}
-                  nickname={participant.nickname || participant.name || participant.participantId}
-                  participantId={participant.participantId}
-                  index={index}
-                  style={participant.style}
-                />
-              </div>
-            ))
-          )}
-        </div>
-
         <div className="note-ring">
           {responseDeck.length === 0 ? (
             <div className="response-empty">
@@ -168,12 +134,12 @@ export default function LiveRoomView({ question, responses = [], participants = 
               <p className="muted">참여자들의 짧은 메모가 테이블 주변에 쌓입니다.</p>
             </div>
           ) : (
-            responseDeck.map(({ response, slot }) => {
-              const displayNickname = getDisplayNickname(response, participants);
+            responseDeck.map(({ response, slot, participant }, index) => {
+              const displayNickname = participant.nickname || participant.name || response.nickname || '익명';
               return (
                 <div
                   key={response.id}
-                  className="ring-item note-slot-item"
+                  className="seat-cluster note-slot-item"
                   style={{
                     '--slot-x': `${slot.x}%`,
                     '--slot-y': `${slot.y}%`,
@@ -182,13 +148,22 @@ export default function LiveRoomView({ question, responses = [], participants = 
                 >
                   <ResponseNote
                     response={response}
-                    participantId={null}
+                    participantId={participant.participantId || response.participantId || null}
                     nickname={displayNickname}
                     burstCount={burstById[response.id] || 0}
                     emphasis={false}
                     highlighted={activeLikeIds.has(response.id)}
                     popular={(response.likes || 0) >= 3}
                   />
+                  <div className="seat-cluster-person">
+                    <ParticipantAvatar
+                      participant={participant}
+                      nickname={displayNickname}
+                      participantId={participant.participantId || response.participantId || ''}
+                      index={index}
+                    />
+                    <div className="seat-cluster-line" aria-hidden="true" />
+                  </div>
                 </div>
               );
             })

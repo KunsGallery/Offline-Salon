@@ -13,7 +13,7 @@ export default function SubmittedScreen({ question, response, onEdit }) {
         <p>{safeJoin(response?.value)}</p>
       </div>
       {onEdit ? (
-        <button className="btn ghost large-btn" onClick={onEdit}>
+        <button className="client-primary-button" onClick={onEdit}>
           수정하기
         </button>
       ) : null}

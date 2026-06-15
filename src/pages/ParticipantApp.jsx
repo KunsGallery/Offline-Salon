@@ -266,7 +266,8 @@ export default function ParticipantApp() {
             question={currentQuestion}
             onSubmit={handleSubmit}
             initialValue={draftValue}
-            submitLabel="수정 저장"
+            submitLabel="수정 완료"
+            busyLabel="저장 중..."
             onCancel={handleCancelEdit}
             cancelLabel="수정 취소"
           />
@@ -281,7 +282,7 @@ export default function ParticipantApp() {
                 <p>{safeJoin(myResponse.value)}</p>
               </div>
               <div className="row wrap gap-sm">
-                <button className="btn primary large-btn" type="button" onClick={handleEdit}>
+                <button className="client-primary-button" type="button" onClick={handleEdit}>
                   수정하기
                 </button>
                 <span className="badge">좋아요 {myResponse.likes || 0}</span>
@@ -329,7 +330,8 @@ export default function ParticipantApp() {
               question={currentQuestion}
               onSubmit={handleSubmit}
               initialValue={draftValue}
-              submitLabel="답변 제출"
+              submitLabel="제출"
+              busyLabel="제출 중..."
             />
             <div className="client-hint panel-soft">
               <p className="eyebrow">AFTER YOU SUBMIT</p>

@@ -4,7 +4,8 @@ export default function QuestionAnswerForm({
   question,
   onSubmit,
   initialValue = '',
-  submitLabel = '답변 제출',
+  submitLabel = '제출',
+  busyLabel = '저장 중...',
   onCancel = null,
   cancelLabel = '취소',
 }) {
@@ -30,7 +31,7 @@ export default function QuestionAnswerForm({
 
   const type = question?.type || 'text';
   const isChoice = (type === 'poll' || type === 'ranking') && options.length > 0;
-  const canSubmit = isChoice ? Boolean(String(value).trim()) : Boolean(String(value).trim());
+  const canSubmit = String(value || '').trim().length > 0;
 
   return (
     <form className="client-panel stack answer-form" onSubmit={submit}>
@@ -68,10 +69,10 @@ export default function QuestionAnswerForm({
           type="submit"
           disabled={busy || !canSubmit}
         >
-          {busy ? '제출 중...' : submitLabel}
+          {busy ? busyLabel : submitLabel}
         </button>
         {onCancel ? (
-          <button className="btn ghost large-btn" type="button" onClick={onCancel} disabled={busy}>
+          <button className="client-secondary-button" type="button" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </button>
         ) : null}
