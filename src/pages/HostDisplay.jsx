@@ -37,7 +37,6 @@ export default function HostDisplay() {
   const visibleResponses = responses.filter((response) => !response.hidden);
   const realtimeError = sessionError || questionsError || participantsError || responsesError;
   const realtimeLoading = sessionLoading || questionsLoading || participantsLoading || responsesLoading;
-  const joinUrl = `${window.location.origin}/client/${sessionId}`;
 
   if (realtimeError) {
     return (
@@ -127,7 +126,7 @@ export default function HostDisplay() {
             <h2>참여 QR</h2>
             <span className="badge">Live</span>
           </div>
-          <QRJoinCard url={joinUrl} />
+          <QRJoinCard sessionId={sessionId} />
         </section>
       </aside>
     </HostShell>

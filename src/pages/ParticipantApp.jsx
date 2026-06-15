@@ -5,7 +5,7 @@ import QuestionAnswerForm from '../components/client/QuestionAnswerForm';
 import SubmittedScreen from '../components/client/SubmittedScreen';
 import WaitingScreen from '../components/client/WaitingScreen';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
-import { realtime } from '../lib/realtime';
+import { mode, realtime } from '../lib/realtime';
 import { useSession } from '../hooks/useSession';
 import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
@@ -93,11 +93,21 @@ export default function ParticipantApp() {
   }
 
   if (!session) {
+    console.warn('[ParticipantApp] session not found', {
+      sessionId,
+      session,
+      loading: realtimeLoading,
+      error: realtimeError,
+    });
     return (
       <main className="mobile-shell">
         <div className="client-panel stack gap-lg">
           <RealtimeStatusBanner loading={realtimeLoading} />
           <h1>세션을 찾을 수 없습니다.</h1>
+          <p className="muted">접속한 세션 ID: {sessionId}</p>
+          {mode !== 'firestore' ? (
+            <p className="tiny muted">현재 {mode} 모드입니다. 다른 기기에서 같은 세션을 보려면 Firestore 모드가 필요합니다.</p>
+          ) : null}
         </div>
       </main>
     );

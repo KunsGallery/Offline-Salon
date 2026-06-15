@@ -154,7 +154,7 @@ export default function AdminSession() {
                 </p>
               </div>
             </div>
-            <QRJoinCard url={clientUrl} />
+            <QRJoinCard sessionId={sessionId} />
           </section>
         </div>
 
