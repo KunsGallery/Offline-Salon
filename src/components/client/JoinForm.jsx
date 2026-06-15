@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 export default function JoinForm({ session, onJoin, loading, allowNickname = true }) {
   const [nickname, setNickname] = useState('');
+  const canJoin = allowNickname ? Boolean(nickname.trim()) : true;
 
   const submit = (event) => {
     event.preventDefault();
@@ -31,7 +32,7 @@ export default function JoinForm({ session, onJoin, loading, allowNickname = tru
         <p className="muted">이 세션은 닉네임 없이 참여할 수 있습니다.</p>
       )}
 
-      <button className="btn primary large-btn join-submit-button" type="submit" disabled={loading}>
+      <button className="client-primary-button join-submit-button" type="submit" disabled={loading || !canJoin}>
         {loading ? '입장 중...' : '다음'}
       </button>
     </form>

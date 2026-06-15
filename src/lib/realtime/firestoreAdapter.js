@@ -431,7 +431,7 @@ const firestoreAdapter = {
     const payload = {
       questionId: input.questionId,
       participantId: input.participantId,
-      nickname: input.nickname || null,
+      nickname: input.nickname || '',
       value: input.value,
       hidden: existing[0]?.hidden ?? false,
       likes: existing[0]?.likes ?? 0,
@@ -446,6 +446,7 @@ const firestoreAdapter = {
         ...existing[0],
         ...payload,
         id: existing[0].id,
+        nickname: input.nickname || existing[0].nickname || '',
         createdAt: existing[0].createdAt,
         updatedAt: new Date().toISOString(),
       });

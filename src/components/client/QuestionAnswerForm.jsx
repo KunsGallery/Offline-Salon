@@ -30,6 +30,7 @@ export default function QuestionAnswerForm({
 
   const type = question?.type || 'text';
   const isChoice = (type === 'poll' || type === 'ranking') && options.length > 0;
+  const canSubmit = isChoice ? Boolean(String(value).trim()) : Boolean(String(value).trim());
 
   return (
     <form className="client-panel stack answer-form" onSubmit={submit}>
@@ -63,9 +64,9 @@ export default function QuestionAnswerForm({
 
       <div className="row wrap gap-sm">
         <button
-          className="btn primary large-btn answer-submit-button"
+          className="client-primary-button answer-submit-button"
           type="submit"
-          disabled={busy || (!isChoice && !String(value).trim()) || (isChoice && !String(value).trim())}
+          disabled={busy || !canSubmit}
         >
           {busy ? '제출 중...' : submitLabel}
         </button>

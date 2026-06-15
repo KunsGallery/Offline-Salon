@@ -413,7 +413,7 @@ const localAdapter = {
       id: session.allowMultipleSubmissions ? createId('response') : `${input.questionId}:${input.participantId}`,
       questionId: input.questionId,
       participantId: input.participantId,
-      nickname: input.nickname || null,
+      nickname: input.nickname || '',
       value: input.value,
       hidden: false,
       likes: 0,
@@ -433,6 +433,7 @@ const localAdapter = {
         hidden: existing.hidden,
         likes: existing.likes || 0,
         likedBy: { ...(existing.likedBy || {}) },
+        nickname: input.nickname || existing.nickname || '',
         createdAt: existing.createdAt,
         updatedAt: nowIso(),
       };
