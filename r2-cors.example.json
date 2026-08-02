@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://YOUR-SITE.netlify.app",
+      "https://YOUR-DOMAIN.com",
+      "http://localhost:8888"
+    ],
+    "AllowedMethods": ["GET", "HEAD", "PUT"],
+    "AllowedHeaders": ["Content-Type", "Cache-Control"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

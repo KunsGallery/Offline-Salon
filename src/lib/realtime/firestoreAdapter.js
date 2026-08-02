@@ -19,6 +19,7 @@ import { requireAdminUser } from '../auth';
 import { db } from '../firebase';
 import {
   cloneParticipant,
+  cloneAsset,
   cloneQuestion,
   cloneResponse,
   cloneSession,
@@ -37,6 +38,9 @@ const sessionCache = new Map();
 const questionCache = new Map();
 const responseCache = new Map();
 const participantCache = new Map();
+const artworkCache = new Map();
+const deckCache = new Map();
+const artworkSecretCache = new Map();
 
 function ensureDb() {
   if (!db) {
@@ -122,6 +126,15 @@ function fromParticipantDoc(participantId, data) {
   });
 }
 
+function fromAssetDoc(id, data) {
+  return cloneAsset({
+    id,
+    ...data,
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt || data.createdAt),
+  });
+}
+
 function writeSessionCache(session) {
   if (!session) return null;
   const normalized = sanitizeSession(cloneSession(session));
@@ -135,6 +148,8 @@ function composeSession(sessionId, baseSession = sessionCache.get(sessionId)) {
   return sanitizeSession(
     cloneSession({
       ...baseSession,
+      artworks: artworkCache.has(sessionId) ? artworkCache.get(sessionId) : baseSession.artworks || [],
+      decks: deckCache.has(sessionId) ? deckCache.get(sessionId) : baseSession.decks || [],
       questions: questionCache.get(sessionId) || baseSession.questions || [],
       responses: responseCache.get(sessionId) || baseSession.responses || [],
       participants: Object.fromEntries(
@@ -180,6 +195,22 @@ function responsesCol(sessionId) {
 
 function participantsCol(sessionId) {
   return collection(ensureDb(), 'sessions', sessionId, 'participants');
+}
+
+function artworksCol(sessionId) {
+  return collection(ensureDb(), 'sessions', sessionId, 'artworks');
+}
+
+function artworkSecretsCol(sessionId) {
+  return collection(ensureDb(), 'sessions', sessionId, 'artworkSecrets');
+}
+
+function decksCol(sessionId) {
+  return collection(ensureDb(), 'sessions', sessionId, 'decks');
+}
+
+function cleanRecord(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 async function readSessionDoc(sessionId) {
@@ -229,6 +260,10 @@ const firestoreAdapter = {
 
   getParticipants(sessionId) {
     return participantCache.get(sessionId) || [];
+  },
+
+  getArtworkSecrets(sessionId) {
+    return artworkSecretCache.get(sessionId) || {};
   },
 
   findSessionQuestion(sessionId, questionId) {
@@ -286,12 +321,21 @@ const firestoreAdapter = {
     rSnap.docs.forEach((item) => batch.delete(item.ref));
     const pSnap = await getDocs(participantsCol(sessionId));
     pSnap.docs.forEach((item) => batch.delete(item.ref));
+    const aSnap = await getDocs(artworksCol(sessionId));
+    aSnap.docs.forEach((item) => batch.delete(item.ref));
+    const sSnap = await getDocs(artworkSecretsCol(sessionId));
+    sSnap.docs.forEach((item) => batch.delete(item.ref));
+    const dSnap = await getDocs(decksCol(sessionId));
+    dSnap.docs.forEach((item) => batch.delete(item.ref));
     batch.delete(sessionDocRef(sessionId));
     await batch.commit();
     sessionCache.delete(sessionId);
     questionCache.delete(sessionId);
     responseCache.delete(sessionId);
     participantCache.delete(sessionId);
+    artworkCache.delete(sessionId);
+    artworkSecretCache.delete(sessionId);
+    deckCache.delete(sessionId);
   },
 
   subscribeSessions(callback, onError) {
@@ -319,24 +363,141 @@ const firestoreAdapter = {
   },
 
   subscribeSession(sessionId, callback, onError) {
-    let unsubscribe = () => {};
+    const unsubscribes = [];
+    const emitSession = () => {
+      const value = composeSession(sessionId);
+      if (value !== undefined) callback(value);
+    };
     try {
-      unsubscribe = onSnapshot(
+      unsubscribes.push(onSnapshot(
         sessionDocRef(sessionId),
         (snap) => {
-          const session = snap.exists() ? writeSessionCache(fromSessionDoc(snap.id, snap.data())) : null;
-          callback(session);
+          if (!snap.exists()) {
+            callback(null);
+            return;
+          }
+          writeSessionCache(fromSessionDoc(snap.id, snap.data()));
+          emitSession();
         },
         (error) => {
           console.error('[firestoreAdapter] subscribeSession failed:', error);
           onError?.(error);
         },
-      );
+      ));
+      unsubscribes.push(onSnapshot(query(artworksCol(sessionId), orderBy('order', 'asc')), (snap) => {
+        artworkCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
+        emitSession();
+      }, onError));
+      unsubscribes.push(onSnapshot(query(decksCol(sessionId), orderBy('order', 'asc')), (snap) => {
+        deckCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
+        emitSession();
+      }, onError));
     } catch (error) {
       console.error('[firestoreAdapter] subscribeSession setup failed:', error);
       onError?.(error);
     }
-    return unsubscribe;
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  },
+
+  subscribeArtworkSecrets(sessionId, callback, onError) {
+    return onSnapshot(
+      artworkSecretsCol(sessionId),
+      (snap) => {
+        const secrets = Object.fromEntries(snap.docs.map((item) => [item.id, { id: item.id, ...item.data() }]));
+        artworkSecretCache.set(sessionId, secrets);
+        callback(secrets);
+      },
+      onError,
+    );
+  },
+
+  async createArtwork(sessionId, artwork, secret = {}) {
+    requireAdminWrite();
+    const id = artwork.id || createId('artwork');
+    const batch = writeBatch(ensureDb());
+    batch.set(doc(artworksCol(sessionId), id), cleanRecord({ ...artwork, id: undefined, title: undefined, artist: undefined, description: undefined, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    batch.set(doc(artworkSecretsCol(sessionId), id), cleanRecord({ title: secret.title || '', artist: secret.artist || '', description: secret.description || '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await batch.commit();
+    return id;
+  },
+
+  async updateArtwork(sessionId, artworkId, publicPatch = {}, secretPatch = {}) {
+    requireAdminWrite();
+    const batch = writeBatch(ensureDb());
+    if (Object.keys(publicPatch).length) batch.set(doc(artworksCol(sessionId), artworkId), cleanRecord({ ...publicPatch, title: undefined, artist: undefined, description: undefined, updatedAt: serverTimestamp() }), { merge: true });
+    if (Object.keys(secretPatch).length) batch.set(doc(artworkSecretsCol(sessionId), artworkId), cleanRecord({ ...secretPatch, updatedAt: serverTimestamp() }), { merge: true });
+    await batch.commit();
+  },
+
+  async deleteArtwork(sessionId, artworkId) {
+    requireAdminWrite();
+    const batch = writeBatch(ensureDb());
+    batch.delete(doc(artworksCol(sessionId), artworkId));
+    batch.delete(doc(artworkSecretsCol(sessionId), artworkId));
+    await batch.commit();
+  },
+
+  async reorderArtworks(sessionId, orderedIds) {
+    requireAdminWrite();
+    const batch = writeBatch(ensureDb());
+    orderedIds.forEach((id, order) => batch.set(doc(artworksCol(sessionId), id), { order, updatedAt: serverTimestamp() }, { merge: true }));
+    await batch.commit();
+  },
+
+  async createDeck(sessionId, deck) {
+    requireAdminWrite();
+    const id = deck.id || createId('deck');
+    await setDoc(doc(decksCol(sessionId), id), cleanRecord({ ...deck, id: undefined, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    return id;
+  },
+
+  async updateDeck(sessionId, deckId, patch) {
+    requireAdminWrite();
+    await setDoc(doc(decksCol(sessionId), deckId), cleanRecord({ ...patch, updatedAt: serverTimestamp() }), { merge: true });
+  },
+
+  async deleteDeck(sessionId, deckId) {
+    requireAdminWrite();
+    await deleteDoc(doc(decksCol(sessionId), deckId));
+  },
+
+  async reorderDecks(sessionId, orderedIds) {
+    requireAdminWrite();
+    const batch = writeBatch(ensureDb());
+    orderedIds.forEach((id, order) => batch.set(doc(decksCol(sessionId), id), { order, updatedAt: serverTimestamp() }, { merge: true }));
+    await batch.commit();
+  },
+
+  async migrateLegacyAssets(sessionId) {
+    requireAdminWrite();
+    const sessionSnap = await getDoc(sessionDocRef(sessionId));
+    if (!sessionSnap.exists()) return;
+    const data = sessionSnap.data();
+    const legacyArtworks = Array.isArray(data.artworks) ? data.artworks : [];
+    const legacyDecks = Array.isArray(data.decks) ? data.decks : [];
+    if (!legacyArtworks.length && !legacyDecks.length) return;
+    const batch = writeBatch(ensureDb());
+    legacyArtworks.forEach((item, index) => {
+      const id = item.id || createId('artwork');
+      batch.set(doc(artworksCol(sessionId), id), cleanRecord({ imageUrl: item.imageUrl, storagePath: item.storagePath || null, order: item.order ?? index, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true });
+      batch.set(doc(artworkSecretsCol(sessionId), id), { title: item.title || '', artist: item.artist || '', description: item.description || '', updatedAt: serverTimestamp() }, { merge: true });
+    });
+    legacyDecks.forEach((item, index) => {
+      const id = item.id || createId('deck');
+      batch.set(doc(decksCol(sessionId), id), cleanRecord({ ...item, id: undefined, order: item.order ?? index, updatedAt: serverTimestamp() }), { merge: true });
+    });
+    batch.update(sessionDocRef(sessionId), { artworks: [], decks: [], updatedAt: serverTimestamp() });
+    await batch.commit();
+  },
+
+  async getSessionAssetLibrary(sessionId) {
+    requireAdminWrite();
+    const [artworkSnap, secretSnap, deckSnap] = await Promise.all([getDocs(query(artworksCol(sessionId), orderBy('order', 'asc'))), getDocs(artworkSecretsCol(sessionId)), getDocs(query(decksCol(sessionId), orderBy('order', 'asc')))]);
+    const secrets = Object.fromEntries(secretSnap.docs.map((item) => [item.id, item.data()]));
+    return {
+      artworks: artworkSnap.docs.map((item) => ({ ...fromAssetDoc(item.id, item.data()), ...(secrets[item.id] || {}) })),
+      decks: deckSnap.docs.map((item) => fromAssetDoc(item.id, item.data())),
+    };
   },
 
   async createQuestion(sessionId, input = {}) {

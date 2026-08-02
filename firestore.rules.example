@@ -28,6 +28,19 @@ service cloud.firestore {
         allow create, update: if true;
         allow delete: if true;
       }
+
+
+      match /artworks/{artworkId} {
+        allow read, create, update, delete: if true;
+      }
+
+      match /artworkSecrets/{artworkId} {
+        allow read, create, update, delete: if true;
+      }
+
+      match /decks/{deckId} {
+        allow read, create, update, delete: if true;
+      }
     }
   }
 }

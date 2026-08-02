@@ -3,7 +3,7 @@ import { realtime } from '../../lib/realtime';
 import { formatDateTime } from '../../lib/format';
 import { buildBranding, extractPalette } from '../../lib/colorPalette';
 import { createId } from '../../lib/ids';
-import { removeMedia, uploadMedia } from '../../lib/media';
+import { removeMedia, removeSessionMedia, uploadMedia } from '../../lib/media';
 
 export default function SessionList({ sessions, onOpen }) {
   const [title, setTitle] = useState('');
@@ -11,6 +11,7 @@ export default function SessionList({ sessions, onOpen }) {
   const [poster, setPoster] = useState(null);
   const [palette, setPalette] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
   const [error, setError] = useState('');
 
   const sortedSessions = useMemo(() => sessions || [], [sessions]);
@@ -32,7 +33,7 @@ export default function SessionList({ sessions, onOpen }) {
       }
       setTitle(''); setDescription(''); setPoster(null); setPalette([]); onOpen(next.id);
     } catch (reason) {
-      await removeMedia(uploadedPoster?.path);
+      await removeMedia(uploadedPoster?.path).catch(() => undefined);
       if (createdSession?.id) await Promise.resolve(realtime.deleteSession(createdSession.id)).catch(() => undefined);
       setError(reason.message);
     } finally {
@@ -48,10 +49,18 @@ export default function SessionList({ sessions, onOpen }) {
     try { setPalette(await extractPalette(file)); } catch (reason) { setPoster(null); setPalette([]); setError(reason.message); }
   };
 
-  const confirmDelete = (sessionId, sessionTitle) => {
+  const confirmDelete = async (sessionId, sessionTitle) => {
     const ok = window.confirm(`세션 "${sessionTitle}"을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`);
-    if (ok) {
-      realtime.deleteSession(sessionId);
+    if (!ok) return;
+    setDeletingId(sessionId);
+    setError('');
+    try {
+      await Promise.resolve(realtime.deleteSession(sessionId));
+      await removeSessionMedia(sessionId);
+    } catch (reason) {
+      setError(`세션 삭제를 모두 마치지 못했습니다: ${reason.message}`);
+    } finally {
+      setDeletingId('');
     }
   };
 
@@ -124,8 +133,8 @@ export default function SessionList({ sessions, onOpen }) {
                   <button type="button" className="btn" onClick={() => onOpen(session.id)}>
                     열기
                   </button>
-                  <button type="button" className="btn ghost" onClick={() => confirmDelete(session.id, session.title)}>
-                    삭제
+                  <button type="button" className="btn ghost" disabled={deletingId === session.id} onClick={() => confirmDelete(session.id, session.title)}>
+                    {deletingId === session.id ? '삭제 중…' : '삭제'}
                   </button>
                 </div>
               </article>

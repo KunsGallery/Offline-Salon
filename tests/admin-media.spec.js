@@ -1,0 +1,95 @@
+import { expect, test } from '@playwright/test';
+
+async function imageBuffer(page, color = '#cf248d') {
+  const dataUrl = await page.evaluate((fill) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 48; canvas.height = 48;
+    const context = canvas.getContext('2d');
+    context.fillStyle = fill; context.fillRect(0, 0, 48, 48);
+    context.fillStyle = '#f6b73c'; context.fillRect(24, 0, 24, 24);
+    context.fillStyle = '#3a86ff'; context.fillRect(0, 24, 24, 24);
+    return canvas.toDataURL('image/png');
+  }, color);
+  return Buffer.from(dataUrl.split(',')[1], 'base64');
+}
+
+function pdfBuffer() {
+  const stream = 'BT /F1 28 Tf 72 700 Td (Offline Salon PDF) Tj ET';
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Annot /Subtype /Link /Rect [72 650 280 690] /Border [0 0 0] /A << /S /URI /URI (https://example.com) >> >>',
+  ];
+  let source = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(source)); source += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = Buffer.byteLength(source);
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => { source += `${String(offset).padStart(10, '0')} 00000 n \n`; });
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(source);
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.removeItem('offline-salon:interactive-studio-pro:v1'));
+  await page.goto('/admin/session_demo');
+});
+
+test('poster palette is saved and applied to the session theme', async ({ page }) => {
+  const before = await page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'));
+  await page.locator('.poster-zone input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: await imageBuffer(page) });
+  await expect(page.locator('.palette-row i')).toHaveCount(3);
+  await page.getByRole('button', { name: '포스터와 테마 적용' }).click();
+  await expect.poll(() => page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'))).not.toBe(before);
+  await expect(page.locator('.theme-live-preview')).toBeVisible();
+});
+
+test('artwork image and private title can be registered and edited', async ({ page }) => {
+  await page.locator('.media-tabs').getByRole('button', { name: /작품/ }).click();
+  await page.locator('.media-upload-form input[type="file"]').setInputFiles({ name: 'artwork.png', mimeType: 'image/png', buffer: await imageBuffer(page, '#614ad9') });
+  await page.getByPlaceholder('실제 작품명 (필수)').fill('테스트 작품명');
+  await page.getByPlaceholder('작가명').fill('테스트 작가');
+  await page.getByPlaceholder('작품 설명').fill('테스트 설명');
+  await page.getByRole('button', { name: '작품 등록' }).click();
+  const card = page.locator('.asset-card').filter({ hasText: '테스트 작품명' });
+  await expect(card).toBeVisible();
+  const data = await page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')));
+  const artwork = data.sessions.session_demo.artworks[0];
+  expect(artwork.title).toBeUndefined();
+  expect(data.sessions.session_demo.artworkSecrets[artwork.id].title).toBe('테스트 작품명');
+  await card.getByRole('button', { name: '화면에 띄우기' }).click();
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
+  await expect(page.locator('.stage-preview.stage-artwork')).toBeVisible();
+  await page.locator('.live-operation-card').getByRole('button', { name: '3. 정답 공개' }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.reveal?.title)).toBe('테스트 작품명');
+});
+
+test('PDF is analyzed, linked and registered', async ({ page }) => {
+  await page.locator('.media-tabs').getByRole('button', { name: /PDF/ }).click();
+  await page.locator('.media-upload-form input[type="file"]').setInputFiles({ name: 'salon.pdf', mimeType: 'application/pdf', buffer: pdfBuffer() });
+  await page.getByPlaceholder('발표 자료명').fill('살롱 발표 자료');
+  await page.getByRole('button', { name: 'PDF 등록' }).click();
+  const card = page.locator('.asset-card').filter({ hasText: '살롱 발표 자료' });
+  await expect(card).toContainText('1 pages');
+  await expect(card).toContainText('링크 1개');
+  await card.getByRole('button', { name: '발표 시작' }).click();
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
+  await expect(page.locator('.stage-preview.stage-pdf')).toBeVisible();
+  await expect(page.locator('.operation-links').getByRole('link')).toHaveAttribute('href', 'https://example.com/');
+});
+
+test('admin sections and mobile remote have no horizontal overflow', async ({ page }) => {
+  for (const name of ['라이브 진행', '참여 현황', '접속·QR']) {
+    await page.locator('.admin-workspace-tabs').getByRole('button', { name: new RegExp(name) }).click();
+    await expect(page.locator('.admin-live-dock')).toBeVisible();
+  }
+  await expect(page.locator('.admin-qr-grid .qr-card')).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/remote/session_demo');
+  await expect(page.getByText('연결됨')).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(overflow).toBe(false);
+});

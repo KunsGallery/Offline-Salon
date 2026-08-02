@@ -99,6 +99,10 @@ export default function HostDisplay() {
     );
   }
 
+  if (session.stage?.blackout) {
+    return <main className="salon-blackout" style={sessionThemeStyle(session)}><p>화면이 잠시 쉬고 있습니다.</p></main>;
+  }
+
   if (session.stage?.mode === 'pdf') {
     const deck = (session.decks || []).find((item) => item.id === session.stage.deckId);
     return <div style={sessionThemeStyle(session)}><PdfHostView session={session} deck={deck} /></div>;

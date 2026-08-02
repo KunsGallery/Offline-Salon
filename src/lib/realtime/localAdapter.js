@@ -281,6 +281,10 @@ const localAdapter = {
     return readParticipants(sessionId);
   },
 
+  getArtworkSecrets(sessionId) {
+    return { ...(readSession(sessionId)?.artworkSecrets || {}) };
+  },
+
   findSessionQuestion(sessionId, questionId) {
     return readQuestions(sessionId).find((question) => question.id === questionId) || null;
   },
@@ -320,6 +324,107 @@ const localAdapter = {
     set.add(callback);
     callback(this.getSession(sessionId));
     return () => set.delete(callback);
+  },
+
+  subscribeArtworkSecrets(sessionId, callback) {
+    const unsubscribe = this.subscribeSession(sessionId, (session) => callback({ ...(session?.artworkSecrets || {}) }));
+    return unsubscribe;
+  },
+
+  createArtwork(sessionId, artwork, secret = {}) {
+    const session = ensureSession(sessionId);
+    const id = artwork.id || createId('artwork');
+    session.artworks = [...(session.artworks || []), { ...artwork, id, title: undefined, artist: undefined, description: undefined }];
+    session.artworkSecrets = { ...(session.artworkSecrets || {}), [id]: { id, title: secret.title || '', artist: secret.artist || '', description: secret.description || '' } };
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return id;
+  },
+
+  updateArtwork(sessionId, artworkId, publicPatch = {}, secretPatch = {}) {
+    const session = ensureSession(sessionId);
+    session.artworks = (session.artworks || []).map((item) => item.id === artworkId ? { ...item, ...publicPatch, title: undefined, artist: undefined, description: undefined } : item);
+    if (Object.keys(secretPatch).length) session.artworkSecrets = { ...(session.artworkSecrets || {}), [artworkId]: { ...(session.artworkSecrets?.[artworkId] || {}), ...secretPatch, id: artworkId } };
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  deleteArtwork(sessionId, artworkId) {
+    const session = ensureSession(sessionId);
+    session.artworks = (session.artworks || []).filter((item) => item.id !== artworkId);
+    const secrets = { ...(session.artworkSecrets || {}) };
+    delete secrets[artworkId];
+    session.artworkSecrets = secrets;
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  reorderArtworks(sessionId, orderedIds) {
+    const session = ensureSession(sessionId);
+    session.artworks = orderedIds.map((id, order) => ({ ...session.artworks.find((item) => item.id === id), order })).filter((item) => item.id);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  createDeck(sessionId, deck) {
+    const session = ensureSession(sessionId);
+    const id = deck.id || createId('deck');
+    session.decks = [...(session.decks || []), { ...deck, id }];
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return id;
+  },
+
+  updateDeck(sessionId, deckId, patch) {
+    const session = ensureSession(sessionId);
+    session.decks = (session.decks || []).map((item) => item.id === deckId ? { ...item, ...patch } : item);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  deleteDeck(sessionId, deckId) {
+    const session = ensureSession(sessionId);
+    session.decks = (session.decks || []).filter((item) => item.id !== deckId);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  reorderDecks(sessionId, orderedIds) {
+    const session = ensureSession(sessionId);
+    session.decks = orderedIds.map((id, order) => ({ ...session.decks.find((item) => item.id === id), order })).filter((item) => item.id);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  migrateLegacyAssets(sessionId) {
+    const session = ensureSession(sessionId);
+    let changed = false;
+    session.artworks = (session.artworks || []).map((item) => {
+      if (item.title !== undefined || item.artist !== undefined || item.description !== undefined) {
+        session.artworkSecrets = { ...(session.artworkSecrets || {}), [item.id]: { id: item.id, title: item.title || '', artist: item.artist || '', description: item.description || '' } };
+        changed = true;
+      }
+      const { title, artist, description, ...publicItem } = item;
+      return publicItem;
+    });
+    if (changed) { session.updatedAt = nowIso(); normalizeSessionState(session); broadcast(sessionId); }
+  },
+
+  getSessionAssetLibrary(sessionId) {
+    const session = readSession(sessionId);
+    if (!session) throw new Error('가져올 세션을 찾을 수 없습니다.');
+    return {
+      artworks: (session.artworks || []).map((item) => ({ ...item, ...(session.artworkSecrets?.[item.id] || {}) })),
+      decks: (session.decks || []).map((item) => ({ ...item })),
+    };
   },
 
   createQuestion(sessionId, input) {

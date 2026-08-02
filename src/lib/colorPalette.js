@@ -53,12 +53,26 @@ export async function extractPalette(file) {
 
 export function sessionThemeStyle(session) {
   const branding = session?.branding || {};
+  const primary = branding.primaryColor || FALLBACK[0];
+  const secondary = branding.secondaryColor || FALLBACK[1];
+  const tertiary = branding.tertiaryColor || FALLBACK[2];
+  const extractedBackground = branding.backgroundColor || '#F6F4EE';
+  const dark = branding.backgroundMode === 'dark';
+  const background = dark ? mix(primary, '#050816', 0.82) : extractedBackground;
   return {
-    '--accent': branding.primaryColor || FALLBACK[0],
-    '--accent-2': branding.secondaryColor || FALLBACK[1],
-    '--accent-3': branding.tertiaryColor || FALLBACK[2],
-    '--room-blue': branding.primaryColor || FALLBACK[0],
-    '--room-lime': branding.secondaryColor || FALLBACK[1],
-    '--room-bg': branding.backgroundColor || '#F6F4EE',
+    '--accent': primary,
+    '--accent-2': secondary,
+    '--accent-3': tertiary,
+    '--room-blue': primary,
+    '--room-lime': secondary,
+    '--room-cyan': tertiary,
+    '--room-bg': background,
+    '--room-surface': dark ? mix(primary, '#0b1224', 0.86) : '#ffffff',
+    '--room-surface-2': dark ? mix(primary, '#111b31', 0.82) : mix(extractedBackground, '#ffffff', 0.45),
+    '--room-ink': dark ? '#f7f9ff' : '#111827',
+    '--room-muted': dark ? '#aab6ce' : '#6b7280',
+    '--room-line': `color-mix(in srgb, ${primary} 22%, transparent)`,
+    '--session-gradient': `linear-gradient(135deg, ${primary}, ${secondary})`,
+    '--session-glow': `color-mix(in srgb, ${tertiary} 20%, transparent)`,
   };
 }

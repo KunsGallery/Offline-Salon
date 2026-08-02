@@ -29,19 +29,12 @@ export default function SessionEditor({ session }) {
             onChange={(event) => patch({ description: event.target.value })}
           />
         </label>
-        <label className="field">
-          <span>브랜드 색상</span>
-          <input
-            className="input"
-            type="color"
-            value={session.branding?.primaryColor || '#004AAD'}
-            onChange={(event) =>
-              realtime.updateSession(session.id, {
-                branding: { ...session.branding, primaryColor: event.target.value },
-              })
-            }
-          />
-        </label>
+        <div className="field">
+          <span>테마 색상 3개</span>
+          <div className="theme-color-inputs">
+            {[['primaryColor', '#004AAD', '주조색'], ['secondaryColor', '#AAD004', '보조색'], ['tertiaryColor', '#41D8FF', '강조색']].map(([key, fallback, label]) => <label key={key} title={label}><input type="color" value={session.branding?.[key] || fallback} onChange={(event) => realtime.updateSession(session.id, { branding: { ...session.branding, [key]: event.target.value, palette: [key === 'primaryColor' ? event.target.value : session.branding?.primaryColor || '#004AAD', key === 'secondaryColor' ? event.target.value : session.branding?.secondaryColor || '#AAD004', key === 'tertiaryColor' ? event.target.value : session.branding?.tertiaryColor || '#41D8FF'] } })} /><small>{label}</small></label>)}
+          </div>
+        </div>
 
         <label className="field">
           <span>배경 모드</span>

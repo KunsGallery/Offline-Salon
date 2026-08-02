@@ -11,8 +11,11 @@ export function cloneQuestion(question) {
   };
 }
 
-function cloneAsset(asset) {
-  return { ...asset };
+export function cloneAsset(asset) {
+  return {
+    ...asset,
+    linksByPage: { ...(asset.linksByPage || {}) },
+  };
 }
 
 export function cloneResponse(response) {
@@ -33,6 +36,9 @@ export function cloneSession(session) {
     branding: { ...(session.branding || {}) },
     stage: { ...(session.stage || {}) },
     artworks: (session.artworks || []).map(cloneAsset),
+    artworkSecrets: Object.fromEntries(
+      Object.entries(session.artworkSecrets || {}).map(([id, value]) => [id, { ...value }]),
+    ),
     decks: (session.decks || []).map(cloneAsset),
     questions: (session.questions || []).map(cloneQuestion),
     responses: (session.responses || []).map(cloneResponse),
@@ -159,8 +165,15 @@ export function normalizeSession(session) {
       questionId: session.stage?.questionId || null,
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),
+      fitMode: session.stage?.fitMode || 'fit',
+      zoom: Math.min(2, Math.max(0.6, Number(session.stage?.zoom || 1))),
+      blackout: session.stage?.blackout === true,
+      reveal: session.stage?.reveal ? { ...session.stage.reveal } : null,
     },
     artworks: Array.isArray(session.artworks) ? session.artworks.map(cloneAsset) : [],
+    artworkSecrets: session.artworkSecrets && typeof session.artworkSecrets === 'object'
+      ? Object.fromEntries(Object.entries(session.artworkSecrets).map(([id, value]) => [id, { ...value }]))
+      : {},
     decks: Array.isArray(session.decks) ? session.decks.map(cloneAsset) : [],
     questions: (session.questions || []).map(normalizeQuestion).filter(Boolean),
     responses: (session.responses || []).map(normalizeResponse).filter(Boolean),
@@ -202,6 +215,7 @@ export function createDemoState() {
         },
         stage: { mode: 'questions', page: 1 },
         artworks: [],
+        artworkSecrets: {},
         decks: [],
         questions: [
           {
@@ -268,6 +282,7 @@ export function createSessionTemplate(input = {}) {
     },
     stage: { mode: 'questions', page: 1 },
     artworks: [],
+    artworkSecrets: {},
     decks: [],
     questions: [],
     responses: [],

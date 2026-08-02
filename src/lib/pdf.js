@@ -8,7 +8,8 @@ const toBlob = (canvas) => new Promise((resolve, reject) => canvas.toBlob((blob)
 export async function inspectPdf(file) {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF 파일만 등록할 수 있습니다.');
   if (file.size >= 50 * 1024 * 1024) throw new Error('PDF는 50MB 미만이어야 합니다.');
-  const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  const document = await loadingTask.promise;
   try {
     const page = await document.getPage(1);
     const base = page.getViewport({ scale: 1 });
@@ -17,9 +18,18 @@ export async function inspectPdf(file) {
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     await page.render({ canvas, viewport }).promise;
-    return { pageCount: document.numPages, thumbnail: await toBlob(canvas) };
+    const linksByPage = {};
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const currentPage = pageNumber === 1 ? page : await document.getPage(pageNumber);
+      const annotations = await currentPage.getAnnotations();
+      const links = annotations
+        .filter((item) => item.subtype === 'Link' && /^https?:\/\//i.test(item.url || item.unsafeUrl || ''))
+        .map((item, index) => ({ url: item.url || item.unsafeUrl, label: item.title || item.contents || `링크 ${index + 1}` }));
+      if (links.length) linksByPage[pageNumber] = links;
+    }
+    return { pageCount: document.numPages, thumbnail: await toBlob(canvas), linksByPage };
   } finally {
-    await document.destroy();
+    await loadingTask.destroy();
   }
 }
 

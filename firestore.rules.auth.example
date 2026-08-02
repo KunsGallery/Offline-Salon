@@ -38,14 +38,30 @@ service cloud.firestore {
       match /responses/{responseId} {
         allow read: if true;
         allow create: if true;
-        // Participant likes/edit require a relaxed rule or Anonymous Auth strategy.
-        allow update, delete: if isAdmin();
+        allow update: if isAdmin()
+          || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['value', 'nickname', 'likes', 'likedBy', 'updatedAt']);
+        allow delete: if isAdmin();
       }
 
       match /participants/{participantId} {
         allow read: if true;
         allow create, update: if true;
         allow delete: if isAdmin();
+      }
+
+      match /artworks/{artworkId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /artworkSecrets/{artworkId} {
+        allow read, create, update, delete: if isAdmin();
+      }
+
+      match /decks/{deckId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
       }
     }
 

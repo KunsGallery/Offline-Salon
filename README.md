@@ -13,7 +13,6 @@ VITE_REALTIME_MODE=firestore
 VITE_FIREBASE_API_KEY=...
 VITE_FIREBASE_AUTH_DOMAIN=...
 VITE_FIREBASE_PROJECT_ID=...
-VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 ```
@@ -29,6 +28,8 @@ npm run dev
 ```bash
 npm run build
 ```
+
+R2 Function까지 포함한 로컬 통합 실행은 `npx netlify dev`를 사용합니다.
 
 ## Firestore Rules 주의사항
 
@@ -54,6 +55,9 @@ Public Write:
 Admin Only:
 - session create/update/delete
 - question create/update/delete/reorder/activate
+- artwork/PDF create/update/delete/reorder
+- private artwork title/artist/description read/write
+- Cloudflare R2 upload URL issue/delete
 - response hide/restore/delete
 - showResults toggle
 - CSV export
@@ -182,7 +186,7 @@ Google 로그인은 팝업 차단이나 모바일 Safari 환경에서 redirect f
 
 새 세션 생성 화면에서 포스터를 선택하면 브라우저에서 대표 색상 3개를 추출합니다. 외부 AI나 이미지 분석 서버로 포스터를 보내지 않으며, 추출된 색은 관리자·Host·Client·Remote 화면의 주요 색상으로 사용됩니다.
 
-기존 세션은 `/admin/:sessionId` 하단의 `포스터 자동 컬러`에서 포스터를 교체할 수 있습니다.
+기존 세션은 `/admin/:sessionId`의 `세션 준비 → 포스터·테마`에서 포스터를 교체할 수 있습니다. 저장 전에 실제 버튼·배경·강조색 미리보기가 표시됩니다.
 
 ## Artwork Title Lab
 
@@ -206,6 +210,6 @@ Google 로그인은 팝업 차단이나 모바일 Safari 환경에서 redirect f
 
 PPTX는 현재 지원하지 않습니다.
 
-Firestore 모드에서 이미지와 PDF 업로드를 사용하려면 Firebase Storage를 활성화하고 `storage.rules.auth.example`을 운영 환경에 맞게 배포해야 합니다. `storage.rules.example`은 폐쇄형 리허설에만 사용하세요.
+이미지와 PDF는 Firebase Storage가 아닌 Cloudflare R2에 저장합니다. API 키 입력 위치와 CORS 설정은 [`docs/R2_SETUP.md`](docs/R2_SETUP.md), 행사 진행 순서는 [`docs/ADMIN_GUIDE.md`](docs/ADMIN_GUIDE.md)를 확인하세요.
 
 로컬 모드의 미디어는 현재 브라우저 탭에서만 유지되는 리허설용입니다. 실제 행사와 여러 기기 동기화에는 Firestore 모드를 사용하세요.
