@@ -1,8 +1,9 @@
 import React from 'react';
+import { sessionThemeStyle } from '../../lib/colorPalette';
 
 export default function HostShell({ session, children, aside }) {
   return (
-    <div className="host-screen" style={{ '--accent': session?.branding?.primaryColor || '#004AAD' }}>
+    <div className="host-screen" style={sessionThemeStyle(session)}>
       <header className="host-topbar">
         <div>
           <p className="eyebrow">HOST DISPLAY</p>

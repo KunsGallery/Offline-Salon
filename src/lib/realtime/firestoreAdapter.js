@@ -71,6 +71,9 @@ function fromSessionDoc(id, data) {
       createdAt: toIso(data.createdAt),
       updatedAt: toIso(data.updatedAt),
       branding: data.branding || {},
+      stage: data.stage || {},
+      artworks: data.artworks || [],
+      decks: data.decks || [],
       questions: [],
       responses: [],
       participants: {},
@@ -89,6 +92,9 @@ function fromQuestionDoc(id, data) {
     isActive: data.isActive,
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
+    artworkId: data.artworkId || null,
+    runId: data.runId || null,
+    internal: data.internal === true,
   });
 }
 
@@ -248,9 +254,15 @@ const firestoreAdapter = {
       updatedAt: serverTimestamp(),
       branding: {
         primaryColor: input.primaryColor || '#004AAD',
+        secondaryColor: '#AAD004',
+        tertiaryColor: '#41D8FF',
+        backgroundColor: '#F6F4EE',
         logoUrl: null,
         backgroundMode: 'dark',
       },
+      stage: { mode: 'questions', page: 1 },
+      artworks: [],
+      decks: [],
     });
     const session = await readSessionDoc(sessionId);
     writeSessionCache(session);
@@ -339,6 +351,9 @@ const firestoreAdapter = {
       options: input.options || [],
       order: nextOrder,
       isActive: false,
+      artworkId: input.artworkId || null,
+      runId: input.runId || null,
+      internal: input.internal === true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -398,6 +413,7 @@ const firestoreAdapter = {
     batch.update(sessionDocRef(sessionId), {
       currentQuestionId: questionId,
       status: 'live',
+      stage: { mode: 'questions', page: 1 },
       updatedAt: serverTimestamp(),
     });
     await batch.commit();

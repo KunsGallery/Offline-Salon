@@ -6,6 +6,7 @@ import QuestionEditor from '../components/admin/QuestionEditor';
 import QuestionList from '../components/admin/QuestionList';
 import ResponseMonitor from '../components/admin/ResponseMonitor';
 import SessionEditor from '../components/admin/SessionEditor';
+import SessionMediaStudio from '../components/admin/SessionMediaStudio';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { formatDateTime } from '../lib/format';
 import QRJoinCard from '../components/host/QRJoinCard';
@@ -14,6 +15,7 @@ import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
+import { sessionThemeStyle } from '../lib/colorPalette';
 
 function copyText(text) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
@@ -93,6 +95,7 @@ export default function AdminSession() {
 
   const clientUrl = `${window.location.origin}/client/${sessionId}`;
   const hostUrl = `${window.location.origin}/host/${sessionId}`;
+  const remoteUrl = `${window.location.origin}/remote/${sessionId}`;
 
   const copyClientLink = async () => {
     try {
@@ -112,7 +115,7 @@ export default function AdminSession() {
   };
 
   return (
-    <main className="page-shell admin-session" style={{ '--accent': session.branding?.primaryColor || '#004AAD' }}>
+    <main className="page-shell admin-session" style={sessionThemeStyle(session)}>
       <AdminStatusBar />
       <header className="admin-header panel">
         <div className="stack gap-xs">
@@ -126,6 +129,9 @@ export default function AdminSession() {
           </button>
           <button className="btn" onClick={() => window.open(hostUrl, '_blank', 'noopener,noreferrer')}>
             Host 화면 열기
+          </button>
+          <button className="btn" onClick={() => window.open(remoteUrl, '_blank', 'noopener,noreferrer')}>
+            모바일 리모컨
           </button>
           <button className="btn" onClick={copyClientLink}>
             Client 링크 복사
@@ -154,7 +160,10 @@ export default function AdminSession() {
                 </p>
               </div>
             </div>
-            <QRJoinCard sessionId={sessionId} />
+            <div className="admin-qr-grid">
+              <QRJoinCard sessionId={sessionId} />
+              <QRJoinCard url={remoteUrl} title="관리자 휴대폰으로 스캔해 리모컨을 여세요" />
+            </div>
           </section>
         </div>
 
@@ -168,7 +177,7 @@ export default function AdminSession() {
               새 질문
             </button>
           </div>
-          <QuestionList session={session} questions={questions} activeQuestionId={session.currentQuestionId} onSelectQuestion={setEditingQuestion} />
+          <QuestionList session={session} questions={questions.filter((question) => !question.internal)} activeQuestionId={session.currentQuestionId} onSelectQuestion={setEditingQuestion} />
           <QuestionEditor session={session} question={editingQuestion} />
         </div>
 
@@ -185,6 +194,7 @@ export default function AdminSession() {
           </section>
         </div>
       </section>
+      <SessionMediaStudio session={session} />
     </main>
   );
 }

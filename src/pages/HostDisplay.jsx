@@ -8,6 +8,8 @@ import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
+import { ArtworkHostView, PdfHostView } from '../components/media/LiveMediaViews';
+import { sessionThemeStyle } from '../lib/colorPalette';
 
 export default function HostDisplay() {
   const { sessionId } = useParams();
@@ -95,6 +97,16 @@ export default function HostDisplay() {
         </div>
       </div>
     );
+  }
+
+  if (session.stage?.mode === 'pdf') {
+    const deck = (session.decks || []).find((item) => item.id === session.stage.deckId);
+    return <div style={sessionThemeStyle(session)}><PdfHostView session={session} deck={deck} /></div>;
+  }
+
+  if (session.stage?.mode === 'artwork') {
+    const artwork = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
+    return <div style={sessionThemeStyle(session)}><ArtworkHostView session={session} artwork={artwork} responses={visibleResponses} /></div>;
   }
 
   return (

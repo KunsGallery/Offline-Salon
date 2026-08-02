@@ -11,6 +11,10 @@ export function cloneQuestion(question) {
   };
 }
 
+function cloneAsset(asset) {
+  return { ...asset };
+}
+
 export function cloneResponse(response) {
   return {
     ...response,
@@ -27,6 +31,9 @@ export function cloneSession(session) {
   return {
     ...session,
     branding: { ...(session.branding || {}) },
+    stage: { ...(session.stage || {}) },
+    artworks: (session.artworks || []).map(cloneAsset),
+    decks: (session.decks || []).map(cloneAsset),
     questions: (session.questions || []).map(cloneQuestion),
     responses: (session.responses || []).map(cloneResponse),
     participants: Object.fromEntries(
@@ -83,6 +90,9 @@ export function normalizeQuestion(question) {
     isActive: Boolean(question.isActive),
     createdAt: question.createdAt || nowIso(),
     updatedAt: question.updatedAt || nowIso(),
+    artworkId: question.artworkId || null,
+    runId: question.runId || null,
+    internal: question.internal === true,
   });
 }
 
@@ -130,9 +140,28 @@ export function normalizeSession(session) {
     updatedAt: session.updatedAt || nowIso(),
     branding: {
       primaryColor: session.branding?.primaryColor || '#004AAD',
+      secondaryColor: session.branding?.secondaryColor || '#AAD004',
+      tertiaryColor: session.branding?.tertiaryColor || '#41D8FF',
+      backgroundColor: session.branding?.backgroundColor || '#F6F4EE',
+      palette: Array.isArray(session.branding?.palette)
+        ? session.branding.palette.slice(0, 3)
+        : [],
       logoUrl: session.branding?.logoUrl || null,
       backgroundMode: session.branding?.backgroundMode || 'dark',
+      posterUrl: session.branding?.posterUrl || null,
+      posterStoragePath: session.branding?.posterStoragePath || null,
     },
+    stage: {
+      mode: session.stage?.mode || 'questions',
+      artworkId: session.stage?.artworkId || null,
+      phase: session.stage?.phase || null,
+      runId: session.stage?.runId || null,
+      questionId: session.stage?.questionId || null,
+      deckId: session.stage?.deckId || null,
+      page: Math.max(1, Number(session.stage?.page || 1)),
+    },
+    artworks: Array.isArray(session.artworks) ? session.artworks.map(cloneAsset) : [],
+    decks: Array.isArray(session.decks) ? session.decks.map(cloneAsset) : [],
     questions: (session.questions || []).map(normalizeQuestion).filter(Boolean),
     responses: (session.responses || []).map(normalizeResponse).filter(Boolean),
     participants: Object.fromEntries(
@@ -165,9 +194,15 @@ export function createDemoState() {
         updatedAt: nowIso(),
         branding: {
           primaryColor: '#004AAD',
+          secondaryColor: '#AAD004',
+          tertiaryColor: '#41D8FF',
+          backgroundColor: '#F6F4EE',
           logoUrl: null,
           backgroundMode: 'dark',
         },
+        stage: { mode: 'questions', page: 1 },
+        artworks: [],
+        decks: [],
         questions: [
           {
             id: questionA,
@@ -225,9 +260,15 @@ export function createSessionTemplate(input = {}) {
     updatedAt: nowIso(),
     branding: {
       primaryColor: input.primaryColor || '#004AAD',
+      secondaryColor: '#AAD004',
+      tertiaryColor: '#41D8FF',
+      backgroundColor: '#F6F4EE',
       logoUrl: null,
       backgroundMode: 'dark',
     },
+    stage: { mode: 'questions', page: 1 },
+    artworks: [],
+    decks: [],
     questions: [],
     responses: [],
     participants: {},

@@ -1,24 +1,51 @@
 import React, { useMemo, useState } from 'react';
 import { realtime } from '../../lib/realtime';
 import { formatDateTime } from '../../lib/format';
+import { buildBranding, extractPalette } from '../../lib/colorPalette';
+import { createId } from '../../lib/ids';
+import { removeMedia, uploadMedia } from '../../lib/media';
 
 export default function SessionList({ sessions, onOpen }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [poster, setPoster] = useState(null);
+  const [palette, setPalette] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
 
   const sortedSessions = useMemo(() => sessions || [], [sessions]);
 
   const handleCreate = async (event) => {
     event.preventDefault();
-    const next = await Promise.resolve(
-      realtime.createSession({
-        title: title.trim() || '새 세션',
-        description: description.trim() || '실시간 인터랙티브 세션',
-      }),
-    );
-    setTitle('');
-    setDescription('');
-    onOpen(next.id);
+    setCreating(true);
+    setError('');
+    let createdSession = null;
+    let uploadedPoster = null;
+    try {
+      const next = await Promise.resolve(realtime.createSession({ title: title.trim() || '새 세션', description: description.trim() || '실시간 인터랙티브 세션' }));
+      createdSession = next;
+      if (poster && palette.length) {
+        const id = createId('poster');
+        const extension = poster.name.split('.').pop()?.toLowerCase() || 'jpg';
+        uploadedPoster = await uploadMedia(next.id, 'poster', id, poster, `poster.${extension}`);
+        await realtime.updateSession(next.id, { branding: { ...next.branding, ...buildBranding(palette), posterUrl: uploadedPoster.url, posterStoragePath: uploadedPoster.path } });
+      }
+      setTitle(''); setDescription(''); setPoster(null); setPalette([]); onOpen(next.id);
+    } catch (reason) {
+      await removeMedia(uploadedPoster?.path);
+      if (createdSession?.id) await Promise.resolve(realtime.deleteSession(createdSession.id)).catch(() => undefined);
+      setError(reason.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const choosePoster = async (event) => {
+    const file = event.target.files?.[0] || null;
+    setPoster(file);
+    setError('');
+    if (!file) return;
+    try { setPalette(await extractPalette(file)); } catch (reason) { setPoster(null); setPalette([]); setError(reason.message); }
   };
 
   const confirmDelete = (sessionId, sessionTitle) => {
@@ -54,8 +81,11 @@ export default function SessionList({ sessions, onOpen }) {
               placeholder="세션의 목적이나 간단한 메모"
             />
           </label>
-          <button className="btn primary" type="submit">
-            새 세션 만들기
+          <label className="field session-poster-field"><span>모임 포스터 (선택)</span><input className="input" type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePoster} /><small>{poster ? `${poster.name} · 대표색 ${palette.length}개 추출` : '포스터를 넣으면 세션 컬러를 자동 생성합니다.'}</small></label>
+          {palette.length ? <div className="palette-row"><span>자동 팔레트</span><div>{palette.map((color) => <i key={color} style={{ background: color }} />)}</div></div> : null}
+          {error ? <p className="error-text">{error}</p> : null}
+          <button className="btn primary" type="submit" disabled={creating}>
+            {creating ? '세션 준비 중…' : '새 세션 만들기'}
           </button>
         </form>
       </section>

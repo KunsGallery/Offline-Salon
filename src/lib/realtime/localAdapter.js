@@ -333,6 +333,9 @@ const localAdapter = {
       options: input.options || [],
       order,
       isActive: false,
+      artworkId: input.artworkId || null,
+      runId: input.runId || null,
+      internal: input.internal === true,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });
@@ -388,6 +391,7 @@ const localAdapter = {
       isActive: question.id === questionId,
     }));
     session.status = 'live';
+    session.stage = { mode: 'questions', page: 1 };
     session.updatedAt = nowIso();
     normalizeSessionState(session);
     broadcast(sessionId, questionId);

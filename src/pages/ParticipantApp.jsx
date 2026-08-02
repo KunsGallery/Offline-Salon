@@ -11,6 +11,8 @@ import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { createParticipantId } from '../lib/ids';
 import { safeJoin } from '../lib/format';
+import { ArtworkParticipantView, PdfParticipantView } from '../components/media/LiveMediaViews';
+import { sessionThemeStyle } from '../lib/colorPalette';
 
 function storageKey(sessionId, key) {
   return `offline-salon:${key}:${sessionId}`;
@@ -149,7 +151,7 @@ export default function ParticipantApp() {
     );
   }
 
-  const accentStyle = { '--accent': session.branding?.primaryColor || '#004AAD' };
+  const accentStyle = sessionThemeStyle(session);
 
   if (session.status === 'ended') {
     return (
@@ -235,6 +237,16 @@ export default function ParticipantApp() {
         <JoinForm session={session} onJoin={handleJoin} loading={isJoining} allowNickname={session.allowNickname} />
       </main>
     );
+  }
+
+  if (session.stage?.mode === 'pdf') {
+    const deck = (session.decks || []).find((item) => item.id === session.stage.deckId);
+    return <div style={accentStyle}><PdfParticipantView deck={deck} page={Math.max(1, Number(session.stage.page || 1))} /></div>;
+  }
+
+  if (session.stage?.mode === 'artwork') {
+    const artwork = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
+    return <div style={accentStyle}><ArtworkParticipantView artwork={artwork} phase={session.stage.phase} responses={visibleResponses} myResponse={myResponse} onSubmit={handleSubmit} onLike={handleToggleLike} participantId={participantId} /></div>;
   }
 
   if (!currentQuestion) {

@@ -5,6 +5,7 @@ import AdminSession from '../pages/AdminSession';
 import HostDisplay from '../pages/HostDisplay';
 import LoginPage from '../pages/LoginPage';
 import ParticipantApp from '../pages/ParticipantApp';
+import RemoteControl from '../pages/RemoteControl';
 import ProtectedRoute from '../components/ProtectedRoute';
 
 export function AppRouter() {
@@ -30,6 +31,7 @@ export function AppRouter() {
       />
       <Route path="/host/:sessionId" element={<HostDisplay />} />
       <Route path="/client/:sessionId" element={<ParticipantApp />} />
+      <Route path="/remote/:sessionId" element={<ProtectedRoute><RemoteControl /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   );
