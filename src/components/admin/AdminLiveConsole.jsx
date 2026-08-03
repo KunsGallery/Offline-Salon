@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { realtime } from '../../lib/realtime';
 import { useArtworkSecrets } from '../../hooks/useArtworkSecrets';
 import { PdfPageCanvas } from '../media/LiveMediaViews';
+import { questionModePatch } from '../../lib/stage';
 
 function stageName(stage) {
   if (stage?.mode === 'pdf') return 'PDF 발표';
@@ -26,7 +27,7 @@ export default function AdminLiveConsole({ session, activeQuestion, responses, p
     setBusy(true); setError('');
     try { await Promise.resolve(action()); } catch (reason) { setError(reason.message || '화면 명령을 적용하지 못했습니다.'); } finally { setBusy(false); }
   };
-  const questionMode = () => realtime.updateSession(session.id, { stage: { mode: 'questions', page: 1, blackout: false } });
+  const questionMode = () => realtime.updateSession(session.id, questionModePatch(session, activeQuestion));
   const phase = (next) => realtime.updateSession(session.id, { stage: { ...stage, phase: next, reveal: next === 'reveal' ? { title: artworkSecret.title || '', artist: artworkSecret.artist || '', description: artworkSecret.description || '' } : null, blackout: false }, showResults: next !== 'collect' });
   const setPage = (next) => deck && realtime.updateSession(session.id, { stage: { ...stage, page: Math.min(deck.pageCount, Math.max(1, next)), blackout: false } });
   const setView = (patch) => realtime.updateSession(session.id, { stage: { ...stage, ...patch } });

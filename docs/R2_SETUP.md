@@ -21,6 +21,7 @@ Bucket → Settings → CORS Policy에서 루트의 `r2-cors.example.json` 내�
 - 로컬 Netlify CLI를 쓸 경우 `http://localhost:8888`
 
 브라우저는 사전서명된 R2 S3 API 주소로 직접 `PUT`하므로 `PUT`, `Content-Type`, `Cache-Control` 허용이 반드시 필요합니다.
+PDF 페이지를 브라우저에서 안정적으로 읽으려면 `Range` 요청 헤더와 `Accept-Ranges`, `Content-Length`, `Content-Range` 응답 헤더도 함께 허용해야 합니다. 이전 버전의 CORS 정책을 사용 중이라면 최신 `r2-cors.example.json` 내용으로 교체하세요.
 
 ## 3. Netlify 환경 변수 입력 위치
 

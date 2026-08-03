@@ -3,6 +3,7 @@ import { buildBranding, extractPalette, sessionThemeStyle } from '../../lib/colo
 import { createId } from '../../lib/ids';
 import { getMediaStorageStatus, removeMedia, uploadMedia } from '../../lib/media';
 import { inspectPdf } from '../../lib/pdf';
+import { questionModePatch } from '../../lib/stage';
 import { realtime } from '../../lib/realtime';
 import { useArtworkSecrets } from '../../hooks/useArtworkSecrets';
 import { PdfPageCanvas } from '../media/LiveMediaViews';
@@ -106,7 +107,7 @@ function PosterThemeEditor({ session }) {
   </section>;
 }
 
-function ArtworkStudio({ session }) {
+function ArtworkStudio({ session, activeQuestion }) {
   const { secrets, error: secretError } = useArtworkSecrets(session.id);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState('');
@@ -171,7 +172,7 @@ function ArtworkStudio({ session }) {
   };
   const remove = async (artwork) => {
     if (!window.confirm(`“${artwork.title || '이 작품'}”을 삭제할까요?`)) return;
-    if (activeId === artwork.id) await realtime.updateSession(session.id, { stage: { mode: 'questions', page: 1 } });
+    if (activeId === artwork.id) await realtime.updateSession(session.id, questionModePatch(session, activeQuestion));
     await realtime.deleteArtwork(session.id, artwork.id);
     const shared = artworks.some((item) => item.id !== artwork.id && item.storagePath === artwork.storagePath);
     if (!shared) await removeMedia(artwork.storagePath).catch(() => undefined);
@@ -211,7 +212,7 @@ function ArtworkStudio({ session }) {
   };
 
   return <section className="stack gap-lg">
-    {activeId ? <div className="active-media-controls"><strong>현재 작품 진행</strong><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn" onClick={() => setPhase('vote')}>투표</button><button className="btn primary" onClick={() => setPhase('reveal')}>정답 공개</button><button className="btn danger" onClick={() => realtime.updateSession(session.id, { stage: { mode: 'questions', page: 1 } })}>종료</button></div> : null}
+    {activeId ? <div className="active-media-controls"><strong>현재 작품 진행</strong><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn" onClick={() => setPhase('vote')}>투표</button><button className="btn primary" onClick={() => setPhase('reveal')}>정답 공개</button><button className="btn danger" onClick={() => realtime.updateSession(session.id, questionModePatch(session, activeQuestion))}>종료</button></div> : null}
     <div className="asset-library-toolbar"><div><strong>작품 라이브러리</strong><span>순서 변경·수정·복제·다른 세션 가져오기를 지원합니다.</span></div><button className="btn" type="button" disabled={busy} onClick={importFromSession}>다른 세션에서 가져오기</button></div>
     <div className="asset-grid">{artworks.map((artwork, index) => <article className={`asset-card ${activeId === artwork.id ? 'active' : ''}`} key={artwork.id}>
       <img src={artwork.imageUrl} alt={artwork.title || '작품'} /><div><strong>{artwork.title || '제목 미정'}</strong><span>{artwork.artist || '작가 미정'}</span>
@@ -225,7 +226,7 @@ function ArtworkStudio({ session }) {
   </section>;
 }
 
-function PdfStudio({ session }) {
+function PdfStudio({ session, activeQuestion }) {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState('');
   const [progress, setProgress] = useState(0);
@@ -254,7 +255,7 @@ function PdfStudio({ session }) {
   };
   const remove = async (deck) => {
     if (!window.confirm(`“${deck.title}” PDF를 삭제할까요?`)) return;
-    if (activeDeck?.id === deck.id) await realtime.updateSession(session.id, { stage: { mode: 'questions', page: 1 } });
+    if (activeDeck?.id === deck.id) await realtime.updateSession(session.id, questionModePatch(session, activeQuestion));
     await realtime.deleteDeck(session.id, deck.id);
     await Promise.all([removeMedia(deck.filePath).catch(() => undefined), removeMedia(deck.thumbnailPath).catch(() => undefined)]);
   };
@@ -272,7 +273,8 @@ function PdfStudio({ session }) {
   </section>;
 }
 
-export default function SessionMediaStudio({ session }) {
+export default function SessionMediaStudio({ session, questions = [] }) {
   const [tab, setTab] = useState('poster');
-  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">SESSION ASSETS</p><h2>세션 준비실</h2><p className="muted">포스터, 작품, PDF를 미리 준비하고 순서를 정합니다.</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button><button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>작품 <b>{session.artworks?.length || 0}</b></button><button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} /> : <PdfStudio session={session} />}</div></section>;
+  const activeQuestion = questions.find((question) => question.id === session.currentQuestionId) || null;
+  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">SESSION ASSETS</p><h2>세션 준비실</h2><p className="muted">포스터, 작품, PDF를 미리 준비하고 순서를 정합니다.</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button><button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>작품 <b>{session.artworks?.length || 0}</b></button><button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} activeQuestion={activeQuestion} /> : <PdfStudio session={session} activeQuestion={activeQuestion} />}</div></section>;
 }

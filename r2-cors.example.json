@@ -6,8 +6,8 @@
       "http://localhost:8888"
     ],
     "AllowedMethods": ["GET", "HEAD", "PUT"],
-    "AllowedHeaders": ["Content-Type", "Cache-Control"],
-    "ExposeHeaders": ["ETag"],
+    "AllowedHeaders": ["Content-Type", "Cache-Control", "Range"],
+    "ExposeHeaders": ["ETag", "Accept-Ranges", "Content-Length", "Content-Range"],
     "MaxAgeSeconds": 3600
   }
 ]

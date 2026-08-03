@@ -11,7 +11,14 @@ export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, comp
   useEffect(() => {
     if (!url) return undefined;
     let active = true;
-    const task = pdfjs.getDocument(url);
+    setPdfDocument(null);
+    setStatus('loading');
+    const task = pdfjs.getDocument({
+      url,
+      disableRange: true,
+      disableStream: true,
+      disableAutoFetch: true,
+    });
     task.promise.then((document) => { if (active) { setStatus('loading'); setPdfDocument(document); } }).catch(() => { if (active) setStatus('error'); });
     return () => { active = false; task.destroy(); };
   }, [url]);
@@ -57,7 +64,19 @@ export function PdfHostView({ session, deck }) {
 }
 
 export function PdfParticipantView({ deck, page }) {
-  return <main className="media-participant pdf-companion"><div className="media-participant-icon">▣</div><p className="eyebrow">NOW PRESENTING</p><h1>{deck?.title || '발표가 진행 중입니다.'}</h1><p>진행자가 앞 화면에서 자료를 설명하고 있어요.<br />화면을 함께 바라봐 주세요.</p>{deck ? <div className="companion-card"><img src={deck.thumbnailUrl} alt="발표 자료 표지" /><strong>{page}<small> / {deck.pageCount} PAGE</small></strong></div> : null}</main>;
+  return <main className="media-participant pdf-companion">
+    <div className="pdf-companion-mark" aria-hidden="true"><span>▣</span><i /></div>
+    <header className="pdf-companion-copy">
+      <p className="eyebrow">NOW PRESENTING</p>
+      <h1>{deck?.title || '발표가 진행 중입니다.'}</h1>
+      <p>진행자가 앞 화면에서 자료를 설명하고 있어요. 휴대폰은 잠시 내려두고 화면을 함께 바라봐 주세요.</p>
+    </header>
+    {deck ? <section className="pdf-companion-card">
+      <div className="pdf-companion-cover"><img src={deck.thumbnailUrl} alt="발표 자료 표지" /><span>LIVE</span></div>
+      <div className="pdf-companion-page"><span>CURRENT PAGE</span><strong>{page}</strong><small>OF {deck.pageCount}</small></div>
+    </section> : null}
+    <footer className="pdf-companion-footer"><i /><span>앞 화면과 실시간으로 연결되어 있습니다.</span><i /></footer>
+  </main>;
 }
 
 export function ArtworkHostView({ session, artwork, responses }) {

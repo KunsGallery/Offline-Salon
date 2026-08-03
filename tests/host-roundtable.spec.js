@@ -120,3 +120,45 @@ test('nickname remains legible when a dark poster theme is active', async ({ pag
   await expect(page.getByRole('heading', { name: '오늘 작품을 보며 가장 오래 머문 생각은 무엇인가요?' })).toBeVisible();
   expect(consoleErrors.filter((message) => message.includes('Maximum update depth exceeded'))).toEqual([]);
 });
+
+test('returning from artwork mode clears the hidden activity question when no public question exists', async ({ page, context }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = 'artwork_activity_question';
+  session.questions = [{
+    id: 'artwork_activity_question',
+    title: '이 작품에 제목을 붙인다면?',
+    description: '떠오르는 제목을 적어보세요.',
+    type: 'artwork-title',
+    options: [],
+    order: 0,
+    isActive: true,
+    internal: true,
+    artworkId: 'artwork_1',
+    runId: 'run_1',
+    createdAt: '2026-08-03T09:00:00.000Z',
+    updatedAt: '2026-08-03T09:00:00.000Z',
+  }];
+  session.artworks = [{ id: 'artwork_1', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' }];
+  session.stage = { mode: 'questions', page: 1, blackout: false };
+  session.participants = {
+    idle_guest: { participantId: 'idle_guest', nickname: '대기자', joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:00:00.000Z' },
+  };
+
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_roundtable', 'idle_guest');
+    localStorage.setItem('offline-salon:nickname:session_roundtable', '대기자');
+  }, { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/remote/session_roundtable');
+  await page.locator('footer .remote-home').click();
+
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.currentQuestionId, STORAGE_KEY)).toBeNull();
+  const participantPage = await context.newPage();
+  await participantPage.setViewportSize({ width: 390, height: 844 });
+  await participantPage.goto('/client/session_roundtable');
+  await expect(participantPage.getByRole('heading', { name: '아직 활성화된 질문이 없습니다.' })).toBeVisible();
+  await expect(participantPage.getByText('이 작품에 제목을 붙인다면?')).toHaveCount(0);
+  await participantPage.close();
+});

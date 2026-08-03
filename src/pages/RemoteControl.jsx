@@ -3,14 +3,17 @@ import { useParams } from 'react-router-dom';
 import { realtime } from '../lib/realtime';
 import { useSession } from '../hooks/useSession';
 import { useResponses } from '../hooks/useResponses';
+import { useQuestions } from '../hooks/useQuestions';
 import { useArtworkSecrets } from '../hooks/useArtworkSecrets';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { createId } from '../lib/ids';
+import { questionModePatch } from '../lib/stage';
 import { PdfPageCanvas } from '../components/media/LiveMediaViews';
 
 export default function RemoteControl() {
   const { sessionId } = useParams();
   const { session, loading, error: sessionError } = useSession(sessionId);
+  const { questions } = useQuestions(sessionId);
   const { secrets } = useArtworkSecrets(sessionId, Boolean(session));
   const { responses } = useResponses(sessionId, session?.stage?.questionId || session?.currentQuestionId || null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +43,7 @@ export default function RemoteControl() {
   if (!session) return <main className="remote-control center-screen"><h1>세션을 찾을 수 없습니다.</h1></main>;
 
   const stage = session.stage || { mode: 'questions' };
+  const activeQuestion = questions.find((question) => question.id === session.currentQuestionId) || null;
   const artworks = (session.artworks || []).map((item) => ({ ...item, ...(secrets[item.id] || {}) }));
   const artwork = artworks.find((item) => item.id === stage.artworkId);
   const deck = (session.decks || []).find((item) => item.id === stage.deckId);
@@ -51,7 +55,7 @@ export default function RemoteControl() {
     setBusy(true); setError('');
     try { await Promise.resolve(action()); } catch (reason) { setError(reason.message || '명령을 적용하지 못했습니다.'); } finally { setBusy(false); }
   };
-  const stop = () => realtime.updateSession(session.id, { stage: { mode: 'questions', page: 1, blackout: false } });
+  const stop = () => realtime.updateSession(session.id, questionModePatch(session, activeQuestion));
   const startArtwork = async (item) => {
     const runId = createId('run');
     const question = await Promise.resolve(realtime.createQuestion(session.id, { title: '이 작품에 제목을 붙인다면?', description: '떠오르는 제목을 적어보세요.', type: 'artwork-title', artworkId: item.id, runId, internal: true }));

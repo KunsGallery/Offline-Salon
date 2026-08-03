@@ -67,7 +67,7 @@ test('artwork image and private title can be registered and edited', async ({ pa
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.reveal?.title)).toBe('테스트 작품명');
 });
 
-test('PDF is analyzed, linked and registered', async ({ page }) => {
+test('PDF is analyzed, linked and registered', async ({ page, context }) => {
   await page.locator('.media-tabs').getByRole('button', { name: /PDF/ }).click();
   await page.locator('.media-upload-form input[type="file"]').setInputFiles({ name: 'salon.pdf', mimeType: 'application/pdf', buffer: pdfBuffer() });
   await page.getByPlaceholder('발표 자료명').fill('살롱 발표 자료');
@@ -78,7 +78,36 @@ test('PDF is analyzed, linked and registered', async ({ page }) => {
   await card.getByRole('button', { name: '발표 시작' }).click();
   await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
   await expect(page.locator('.stage-preview.stage-pdf')).toBeVisible();
+  await expect(page.locator('.stage-preview.stage-pdf .salon-pdf-canvas')).toHaveClass(/ready/);
   await expect(page.locator('.operation-links').getByRole('link')).toHaveAttribute('href', 'https://example.com/');
+
+  await page.evaluate(() => {
+    const key = 'offline-salon:interactive-studio-pro:v1';
+    const state = JSON.parse(localStorage.getItem(key));
+    state.sessions.session_demo.decks[0].title = '아주긴파일명이라도화면밖으로절대넘어가지않는오프라인살롱발표자료테스트';
+    localStorage.setItem(key, JSON.stringify(state));
+    localStorage.setItem('offline-salon:participantId:session_demo', 'pdf_mobile_guest');
+    localStorage.setItem('offline-salon:nickname:session_demo', 'PDF 점검');
+  });
+  const clientPage = await context.newPage();
+  await clientPage.setViewportSize({ width: 390, height: 844 });
+  await clientPage.goto('/client/session_demo');
+  await expect(clientPage.locator('.pdf-companion-card')).toBeVisible();
+  const mobileLayout = await clientPage.evaluate(() => {
+    const heading = document.querySelector('.pdf-companion-copy h1');
+    const style = getComputedStyle(heading);
+    return {
+      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      headingWidth: heading.getBoundingClientRect().width,
+      viewportWidth: document.documentElement.clientWidth,
+      fontSize: Number.parseFloat(style.fontSize),
+      lineHeight: Number.parseFloat(style.lineHeight),
+    };
+  });
+  expect(mobileLayout.horizontalOverflow).toBe(false);
+  expect(mobileLayout.headingWidth).toBeLessThan(mobileLayout.viewportWidth);
+  expect(mobileLayout.lineHeight).toBeGreaterThan(mobileLayout.fontSize);
+  await clientPage.close();
 });
 
 test('admin sections and mobile remote have no horizontal overflow', async ({ page }) => {
