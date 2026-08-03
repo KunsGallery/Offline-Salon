@@ -7,9 +7,13 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "prepare:pdfjs": "node scripts/copy-pdfjs-assets.mjs",
+    "predev": "npm run prepare:pdfjs",
     "dev": "vite",
+    "prebuild": "npm run prepare:pdfjs",
     "build": "vite build",
     "preview": "vite preview",
+    "pretest:e2e": "npm run prepare:pdfjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

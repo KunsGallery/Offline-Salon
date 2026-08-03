@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { pdfjs } from '../../lib/pdf';
+import { pdfDocumentOptions, pdfjs } from '../../lib/pdf';
 import { safeJoin } from '../../lib/format';
 
 export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, compact = false }) {
@@ -13,12 +13,12 @@ export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, comp
     let active = true;
     setPdfDocument(null);
     setStatus('loading');
-    const task = pdfjs.getDocument({
+    const task = pdfjs.getDocument(pdfDocumentOptions({
       url,
       disableRange: true,
       disableStream: true,
       disableAutoFetch: true,
-    });
+    }));
     task.promise.then((document) => { if (active) { setStatus('loading'); setPdfDocument(document); } }).catch(() => { if (active) setStatus('error'); });
     return () => { active = false; task.destroy(); };
   }, [url]);

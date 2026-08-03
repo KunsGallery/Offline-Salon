@@ -3,12 +3,30 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
+const viteBaseUrl = import.meta.env.BASE_URL || '/';
+const baseUrl = viteBaseUrl.endsWith('/') ? viteBaseUrl : `${viteBaseUrl}/`;
+const pdfAssetRoot = `${baseUrl}pdfjs/`;
+
+const pdfAssetOptions = {
+  cMapUrl: `${pdfAssetRoot}cmaps/`,
+  cMapPacked: true,
+  standardFontDataUrl: `${pdfAssetRoot}standard_fonts/`,
+  wasmUrl: `${pdfAssetRoot}wasm/`,
+  iccUrl: `${pdfAssetRoot}iccs/`,
+  useSystemFonts: true,
+  disableFontFace: false,
+};
+
+export function pdfDocumentOptions(source = {}) {
+  return { ...pdfAssetOptions, ...source };
+}
+
 const toBlob = (canvas) => new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PDF 표지를 만들 수 없습니다.')), 'image/jpeg', 0.86));
 
 export async function inspectPdf(file) {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF 파일만 등록할 수 있습니다.');
   if (file.size >= 50 * 1024 * 1024) throw new Error('PDF는 50MB 미만이어야 합니다.');
-  const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  const loadingTask = pdfjs.getDocument(pdfDocumentOptions({ data: await file.arrayBuffer() }));
   const document = await loadingTask.promise;
   try {
     const page = await document.getPage(1);

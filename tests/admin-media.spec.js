@@ -33,6 +33,10 @@ function pdfBuffer() {
   return Buffer.from(source);
 }
 
+function koreanCidPdfBuffer() {
+  return Buffer.from('JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSFlTTXllb25nSm8tTWVkaXVtIC9EZXNjZW5kYW50Rm9udHMgWyA8PAovQmFzZUZvbnQgL0hZU015ZW9uZ0pvLU1lZGl1bSAvQ0lEU3lzdGVtSW5mbyA8PAovT3JkZXJpbmcgKEtvcmVhMSkgL1JlZ2lzdHJ5IChBZG9iZSkgL1N1cHBsZW1lbnQgMQo+PiAvRFcgMTAwMCAvRm9udERlc2NyaXB0b3IgPDwKL0FzY2VudCA3NTIgL0F2Z1dpZHRoIDUwMCAvQ2FwSGVpZ2h0IDczNyAvRGVzY2VudCAtMjcxIC9GbGFncyA2IC9Gb250QkJveCBbIDAgLTE0OCAxMDAxIDg4MCBdIAogIC9Gb250TmFtZSAvSFlTTXllb25nSm8tTWVkaXVtIC9JdGFsaWNBbmdsZSAwIC9MZWFkaW5nIDE0OCAvTWF4V2lkdGggMTAwMCAvTWlzc2luZ1dpZHRoIDUwMCAvU3RlbUggOTEgCiAgL1N0ZW1WIDU4IC9UeXBlIC9Gb250RGVzY3JpcHRvciAvWEhlaWdodCA1NTMKPj4gL1N1YnR5cGUgL0NJREZvbnRUeXBlMiAvVHlwZSAvRm9udCAKICAvVyBbIDEgWyAzMzMgNDE2IF0gMyBbIDQxNiA4MzMgNjI1IDkxNiA4MzMgMjUwIDUwMCBdIDEwIDExIDUwMCAxMiBbIDgzMyAyOTEgODMzIDI5MSAzNzUgNjI1IF0gMTggCiAgMjYgNjI1IDI3IDI4IDMzMyAyOSAzMCA4MzMgMzEgWyA5MTYgNTAwIDEwMDAgNzkxIDcwOCBdIAogIDM2IFsgNzA4IDc1MCA3MDggNjY2IDc1MCA3OTEgMzc1IDUwMCA3OTEgNjY2IAogIDkxNiA3OTEgNzUwIDY2NiA3NTAgNzA4IDY2NiA3OTEgXSA1NCBbIDc5MSA3NTAgMTAwMCA3MDggXSA1OCBbIDcwOCA2NjYgNTAwIDM3NSA1MDAgXSA2MyA2NCA1MDAgNjUgCiAgWyAzMzMgNTQxIDU4MyA1NDEgNTgzIF0gNzAgWyA1ODMgMzc1IDU4MyBdIDczIFsgNTgzIDI5MSAzMzMgNTgzIDI5MSA4NzUgNTgzIF0gODAgODIgNTgzIDgzIFsgNDU4IDU0MSAzNzUgNTgzIF0gCiAgODcgWyA1ODMgODMzIDYyNSBdIDkwIFsgNjI1IDUwMCA1ODMgXSA5MyA5NCA1ODMgOTUgWyA3NTAgXSBdCj4+IF0gL0VuY29kaW5nIC9VbmlLUy1VQ1MyLUggL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMCAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgOCAwIFIgL01lZGlhQm94IFsgMCAwIDYxMiA3OTIgXSAvUGFyZW50IDcgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL1BhZ2VNb2RlIC9Vc2VOb25lIC9QYWdlcyA3IDAgUiAvVHlwZSAvQ2F0YWxvZwo+PgplbmRvYmoKNiAwIG9iago8PAovQXV0aG9yIChhbm9ueW1vdXMpIC9DcmVhdGlvbkRhdGUgKEQ6MjAyNjA4MDMxNDA2NDArMDknMDAnKSAvQ3JlYXRvciAoYW5vbnltb3VzKSAvS2V5d29yZHMgKCkgL01vZERhdGUgKEQ6MjAyNjA4MDMxNDA2NDArMDknMDAnKSAvUHJvZHVjZXIgKFJlcG9ydExhYiBQREYgTGlicmFyeSAtIFwob3BlbnNvdXJjZVwpKSAKICAvU3ViamVjdCAodW5zcGVjaWZpZWQpIC9UaXRsZSAodW50aXRsZWQpIC9UcmFwcGVkIC9GYWxzZQo+PgplbmRvYmoKNyAwIG9iago8PAovQ291bnQgMSAvS2lkcyBbIDQgMCBSIF0gL1R5cGUgL1BhZ2VzCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9MZW5ndGggNDE0Cj4+CnN0cmVhbQoxIDAgMCAxIDAgMCBjbSAgQlQgL0YxIDEyIFRmIDE0LjQgVEwgRVQKQlQgL0YyIDMyIFRmIDM4LjQgVEwgRVQKQlQgMSAwIDAgMSA3MiA3MDAgVG0gL0YyIDMyIFRmIDM4LjQgVEwgKFwzMDYkXDMyNVwwMDRcMjY3fFwzMDd4XDAwMCBcMzAwXDI2NFwyNzBxXDAwMCBcMzI1XFxcMjU2XDAwMFwwMDAgXDI3MFwwMTRcMjYzVFwyNzFcMzAxKSBUaiBUKiBFVApCVCAvRjIgMjAgVGYgMjQgVEwgRVQKQlQgMSAwIDAgMSA3MiA2NTAgVG0gL0YyIDIwIFRmIDI0IFRMIChcMzAyK1wzMDdcMjIwXDAwMCBcMDAwMVwwMDAyXDAwMDNcMjU0XDM3NFwwMDAgXDMyNVxcXDI1NlwwMDBcMzA3dFwwMDAgXDMyNWhcMjU2XDMzMFwwMDAgXDI3NFwzNjRcMzA1XDM1NFwzMDV8XDAwMCBcMzI1aVwyNjJcMzEwXDI2MlwzNDRcMDAwLikgVGogVCogRVQKIAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA5CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA2MSAwMDAwMCBuIAowMDAwMDAwMTAyIDAwMDAwIG4gCjAwMDAwMDAyMDkgMDAwMDAgbiAKMDAwMDAxMjQ4IDAwMDAwIG4gCjAwMDAwMDE0NDEgMDAwMDAgbiAKMDAwMDAwMTUwOSAwMDAwMCBuIAowMDAwMDAxNzcwIDAwMDAwIG4gCjAwMDAwMDE4MjkgMDAwMDAgbiAKdHJhaWxlcgo8PAovSUQgCls8ZTIyYzJhOTk5MDM4YzkwODY3N2E5MjVjNmRjZjY3NWQ+PGUyMmMyYTk5OTAzOGM5MDg2NzdhOTI1YzZkY2Y2NzVkPl0KJSBSZXBvcnRMYWIgZ2VuZXJhdGVkIFBERiBkb2N1bWVudCAtLSBkaWdlc3QgKG9wZW5zb3VyY2UpCgovSW5mbyA2IDAgUgovUm9vdCA1IDAgUgovU2l6ZSA5Cj4+CnN0YXJ0eHJlZgoyMjkyCiUlRU9GCg==', 'base64');
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.removeItem('offline-salon:interactive-studio-pro:v1'));
   await page.goto('/admin/session_demo');
@@ -108,6 +112,24 @@ test('PDF is analyzed, linked and registered', async ({ page, context }) => {
   expect(mobileLayout.headingWidth).toBeLessThan(mobileLayout.viewportWidth);
   expect(mobileLayout.lineHeight).toBeGreaterThan(mobileLayout.fontSize);
   await clientPage.close();
+});
+
+test('Korean CID PDF has a bundled character map and renders', async ({ page, request }) => {
+  await page.locator('.media-tabs').getByRole('button', { name: /PDF/ }).click();
+  const cmapResponse = await request.get('/pdfjs/cmaps/UniKS-UCS2-H.bcmap');
+  expect(cmapResponse.status()).toBe(200);
+  await page.locator('.media-upload-form input[type="file"]').setInputFiles({
+    name: 'korean-cid.pdf',
+    mimeType: 'application/pdf',
+    buffer: koreanCidPdfBuffer(),
+  });
+  await page.getByPlaceholder('발표 자료명').fill('한글 PDF 점검');
+  await page.getByRole('button', { name: 'PDF 등록' }).click();
+  const card = page.locator('.asset-card').filter({ hasText: '한글 PDF 점검' });
+  await expect(card).toContainText('1 pages');
+  await card.getByRole('button', { name: '발표 시작' }).click();
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
+  await expect(page.locator('.stage-preview.stage-pdf .salon-pdf-canvas')).toHaveClass(/ready/);
 });
 
 test('admin sections and mobile remote have no horizontal overflow', async ({ page }) => {
