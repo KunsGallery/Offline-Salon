@@ -103,7 +103,7 @@ export default function ParticipantApp() {
       return () => window.clearInterval(timer);
     }
     return undefined;
-  }, [participantId, session, sessionId]);
+  }, [participantId, session?.id, sessionId]);
 
   useEffect(() => {
     if (!session || !sessionId || !participantId || !nickname) return;

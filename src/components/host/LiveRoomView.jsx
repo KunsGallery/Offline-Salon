@@ -1,188 +1,135 @@
 import React, { useMemo } from 'react';
-import ParticipantAvatar from './ParticipantAvatar';
-import ResponseNote from './ResponseNote';
+import QRJoinCard from './QRJoinCard';
+import LikeBurst from './LikeBurst';
+import { formatCompactTime, safeJoin } from '../../lib/format';
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
+const MAX_VISIBLE_SEATS = 10;
 
-const ROOM_SLOTS_BY_COUNT = {
-  1: [{ x: 50, y: 66 }],
-  2: [
-    { x: 36, y: 58 },
-    { x: 64, y: 58 },
-  ],
-  3: [
-    { x: 32, y: 58 },
-    { x: 68, y: 58 },
-    { x: 50, y: 74 },
-  ],
-  4: [
-    { x: 28, y: 54 },
-    { x: 72, y: 54 },
-    { x: 38, y: 74 },
-    { x: 62, y: 74 },
-  ],
+const SLOT_SETS = {
+  1: [{ x: 50, y: 83, rotate: 0 }],
+  2: [{ x: 28, y: 79, rotate: -2 }, { x: 72, y: 79, rotate: 2 }],
+  3: [{ x: 15, y: 55, rotate: -2 }, { x: 85, y: 55, rotate: 2 }, { x: 50, y: 84, rotate: 0 }],
+  4: [{ x: 18, y: 34, rotate: -2 }, { x: 82, y: 34, rotate: 2 }, { x: 27, y: 81, rotate: 2 }, { x: 73, y: 81, rotate: -2 }],
+  5: [{ x: 17, y: 32, rotate: -2 }, { x: 83, y: 32, rotate: 2 }, { x: 13, y: 72, rotate: 2 }, { x: 50, y: 86, rotate: 0 }, { x: 87, y: 72, rotate: -2 }],
 };
 
-const ROOM_SLOTS_DEFAULT = [
-  { x: 28, y: 54 },
-  { x: 72, y: 54 },
-  { x: 38, y: 74 },
-  { x: 62, y: 74 },
-  { x: 20, y: 66 },
-  { x: 80, y: 66 },
-  { x: 34, y: 42 },
-  { x: 66, y: 42 },
-  { x: 50, y: 82 },
-  { x: 50, y: 46 },
+const DEFAULT_SLOTS = [
+  { x: 18, y: 20, rotate: -2 },
+  { x: 50, y: 14, rotate: 0 },
+  { x: 82, y: 20, rotate: 2 },
+  { x: 12, y: 48, rotate: -1 },
+  { x: 88, y: 48, rotate: 1 },
+  { x: 13, y: 73, rotate: 2 },
+  { x: 87, y: 73, rotate: -2 },
+  { x: 27, y: 87, rotate: 2 },
+  { x: 50, y: 90, rotate: 0 },
+  { x: 73, y: 87, rotate: -2 },
 ];
-
-function getResponseParticipant(response, participants) {
-  const participant = participants.find(
-    (item) => String(item.id || item.participantId) === String(response.participantId),
-  );
-
-  return (
-    participant || {
-      participantId: response.participantId,
-      nickname: response.nickname || '익명',
-    }
-  );
-}
 
 function getCreatedTime(value) {
   const time = new Date(value || 0).getTime();
   return Number.isFinite(time) ? time : 0;
 }
 
-export default function LiveRoomView({ question, responses = [], participants = [], session, likeEffects = [] }) {
-  const visibleResponses = useMemo(() => [...responses].filter((response) => response.hidden !== true), [responses]);
+function getParticipant(response, participants) {
+  return participants.find((item) => String(item.id || item.participantId) === String(response.participantId)) || null;
+}
+
+function getInitial(value) {
+  return String(value || '익').trim().charAt(0).toUpperCase() || '익';
+}
+
+export default function LiveRoomView({ question, responses = [], participants = [], session, sessionId, likeEffects = [] }) {
   const stableResponses = useMemo(
-    () =>
-      [...visibleResponses].sort(
-        (a, b) => getCreatedTime(a.createdAt) - getCreatedTime(b.createdAt) || String(a.id).localeCompare(String(b.id)),
-      ),
-    [visibleResponses],
+    () => [...responses]
+      .filter((response) => response.hidden !== true)
+      .sort((a, b) => getCreatedTime(a.createdAt) - getCreatedTime(b.createdAt) || String(a.id).localeCompare(String(b.id))),
+    [responses],
   );
-  const slots = useMemo(() => ROOM_SLOTS_BY_COUNT[stableResponses.length] || ROOM_SLOTS_DEFAULT, [stableResponses.length]);
-  const positionedResponses = useMemo(
-    () =>
-      stableResponses.map((response, index) => ({
-        response,
-        slot: slots[index % slots.length],
-        participant: getResponseParticipant(response, participants),
-      })),
-    [participants, slots, stableResponses],
-  );
-  const totalLikes = stableResponses.reduce((sum, response) => sum + (response.likes || 0), 0);
-  const overflowCount = Math.max(0, stableResponses.length - slots.length);
+  const featuredResponses = useMemo(() => stableResponses.slice(-MAX_VISIBLE_SEATS), [stableResponses]);
+  const slots = SLOT_SETS[featuredResponses.length] || DEFAULT_SLOTS;
+  const totalLikes = stableResponses.reduce((sum, response) => sum + Number(response.likes || 0), 0);
+  const hiddenCount = Math.max(0, stableResponses.length - featuredResponses.length);
   const activeLikeIds = useMemo(() => new Set(likeEffects.map((effect) => effect.responseId)), [likeEffects]);
-  const latestLikeTokenById = useMemo(
-    () =>
-      likeEffects.reduce((accumulator, effect) => {
-        accumulator[effect.responseId] = effect.token;
-        return accumulator;
-      }, {}),
-    [likeEffects],
-  );
-  const burstById = useMemo(
-    () =>
-      likeEffects.reduce((accumulator, effect) => {
-        accumulator[effect.responseId] = accumulator[effect.responseId] || 0;
-        accumulator[effect.responseId] += effect.burstCount || 1;
-        return accumulator;
-      }, {}),
-    [likeEffects],
-  );
+  const burstById = useMemo(() => likeEffects.reduce((result, effect) => {
+    result[effect.responseId] = (result[effect.responseId] || 0) + (effect.burstCount || 1);
+    return result;
+  }, {}), [likeEffects]);
 
   return (
-    <section className="live-room panel">
-      <header className="live-room-header">
-        <div className="stack gap-xs">
-          <p className="eyebrow">UNFRAME LIVE ROOM</p>
-          <h2>{question?.title || session?.title || '질문을 준비 중입니다.'}</h2>
-          <p className="muted">
-            {question?.description || '관리자가 질문을 활성화하면 메모와 좋아요가 테이블 위로 올라옵니다.'}
+    <section className="salon-roundtable" data-testid="salon-roundtable">
+      <header className="salon-roundtable-intro">
+        <div>
+          <p className="eyebrow">OPEN CONVERSATION · LIVE</p>
+          <p className="salon-roundtable-description">
+            {question?.description || '질문이 시작되면 참여자들의 생각이 테이블 둘레에 모입니다.'}
           </p>
         </div>
-        <div className="row wrap gap-sm live-room-stats">
-          <span className="badge">응답 {stableResponses.length}</span>
-          <span className="badge">좋아요 {totalLikes}</span>
-          <span className="badge">참여자 {participants.length}</span>
-          <span className={`badge status-${session?.status || 'draft'}`}>{session?.status || 'draft'}</span>
+        <div className="salon-roundtable-metrics" aria-label="실시간 참여 현황">
+          <span><b>{participants.length}</b> people</span>
+          <span><b>{stableResponses.length}</b> answers</span>
+          <span><b>{totalLikes}</b> hearts</span>
         </div>
       </header>
 
-      <div className="live-room-stage">
-        <div className="room-glow room-glow-a" />
-        <div className="room-glow room-glow-b" />
-        <div className="table-shadow" />
-
-        <div className="room-table">
-          <div className="room-table-core">
-            <p className="table-kicker">Conversation Table</p>
-            <h3>{session?.title || '테이블 중심의 살롱'}</h3>
-            <p className="muted">
-              {question
-                ? '참여자들의 조각이 테이블 위에 놓이고, 좋아요가 들어오면 살짝 반짝입니다.'
-                : '질문이 시작되면 이 자리로 메모가 모입니다.'}
-            </p>
+      <div className="salon-roundtable-stage">
+        <div className="salon-room-light salon-room-light-left" />
+        <div className="salon-room-light salon-room-light-right" />
+        <div className="salon-table-shadow" />
+        <div className="salon-table" aria-label="오늘의 질문">
+          <div className="salon-table-inlay">
+            <span>QUESTION ON THE TABLE</span>
+            <h2>{question?.title || session?.title || '질문을 준비하고 있습니다.'}</h2>
+            <i aria-hidden="true" />
+            <p>{stableResponses.length ? `${stableResponses.length}개의 생각이 한자리에 모였습니다.` : '첫 번째 이야기를 기다리고 있습니다.'}</p>
           </div>
         </div>
 
-        <div className="note-ring">
-          {positionedResponses.length === 0 ? (
-            <div className="response-empty">
-              <p className="eyebrow">MEMO BOARD</p>
-              <h3>첫 답변이 올라오면 여기서 살아납니다.</h3>
-              <p className="muted">참여자들의 짧은 메모가 테이블 주변에 쌓입니다.</p>
-            </div>
-          ) : (
-            positionedResponses.map(({ response, slot, participant }, index) => {
-              const displayNickname = participant.nickname || participant.name || response.nickname || '익명';
-              const reactionToken = latestLikeTokenById[response.id] || 'stable';
-              return (
-                <div
-                  key={`${response.id}:${reactionToken}`}
-                  className="live-room-seat seat-cluster note-slot-item"
-                  style={{
-                    '--slot-x': `${slot.x}%`,
-                    '--slot-y': `${slot.y}%`,
-                    '--slot-rotate': `${((slot.x + slot.y) % 12) - 6}deg`,
-                  }}
-                >
-                  <ResponseNote
-                    response={response}
-                    participantId={participant.participantId || response.participantId || null}
-                    nickname={displayNickname}
-                    burstCount={burstById[response.id] || 0}
-                    emphasis={false}
-                    highlighted={activeLikeIds.has(response.id)}
-                    popular={(response.likes || 0) >= 3}
-                    reactionToken={reactionToken}
-                  />
-                  <div className="seat-cluster-person">
-                    <ParticipantAvatar
-                      participant={participant}
-                      nickname={displayNickname}
-                      participantId={participant.participantId || response.participantId || ''}
-                      index={index}
-                    />
-                    <div className="seat-cluster-line" aria-hidden="true" />
-                  </div>
-                </div>
-              );
-            })
-          )}
+        <div className="salon-seat-layer">
+          {featuredResponses.map((response, index) => {
+            const slot = slots[index] || DEFAULT_SLOTS[index];
+            const participant = getParticipant(response, participants);
+            const nickname = participant?.nickname || response.nickname || '익명';
+            const likes = Number(response.likes || 0);
+            const highlighted = activeLikeIds.has(response.id);
+            return (
+              <article
+                className={`salon-seat ${highlighted ? 'is-liked-now' : ''} ${likes >= 3 ? 'is-popular' : ''}`}
+                key={response.id}
+                style={{
+                  '--seat-x': `${slot.x}%`,
+                  '--seat-y': `${slot.y}%`,
+                  '--seat-rotate': `${slot.rotate}deg`,
+                  '--seat-delay': `${Math.min(index * 55, 360)}ms`,
+                }}
+              >
+                {burstById[response.id] ? <LikeBurst count={burstById[response.id]} /> : null}
+                <header>
+                  <span className="salon-seat-avatar">{getInitial(nickname)}</span>
+                  <div><strong>{nickname}</strong><small>{formatCompactTime(response.createdAt)}</small></div>
+                  <b className="salon-seat-likes">♥ {likes}</b>
+                </header>
+                <p>{safeJoin(response.value)}</p>
+                <footer><span>SEAT {String(index + 1).padStart(2, '0')}</span><i /></footer>
+              </article>
+            );
+          })}
         </div>
-      </div>
 
-      {overflowCount > 0 ? (
-        <p className="tiny muted">
-          추가 메모 {clamp(overflowCount, 0, 99)}개는 최신 순으로 정리됩니다.
-        </p>
-      ) : null}
+        {featuredResponses.length === 0 ? (
+          <div className="salon-empty-seat">
+            <span>01</span>
+            <div><strong>첫 번째 자리가 비어 있어요.</strong><p>QR을 스캔하고 이야기를 시작해 주세요.</p></div>
+          </div>
+        ) : null}
+
+        <aside className="salon-join-card">
+          <QRJoinCard sessionId={sessionId} title="SCAN TO JOIN" />
+          <span>salon.unframe.kr</span>
+        </aside>
+
+        {hiddenCount > 0 ? <div className="salon-overflow-count">+ {hiddenCount}개의 이전 답변</div> : null}
+      </div>
     </section>
   );
 }

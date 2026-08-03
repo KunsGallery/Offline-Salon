@@ -1,9 +1,9 @@
 import React from 'react';
 import { sessionThemeStyle } from '../../lib/colorPalette';
 
-export default function HostShell({ session, children, aside }) {
+export default function HostShell({ session, children, aside, variant = '' }) {
   return (
-    <div className="host-screen" style={sessionThemeStyle(session)}>
+    <div className={`host-screen ${variant ? `host-screen-${variant}` : ''}`} style={sessionThemeStyle(session)}>
       <header className="host-topbar">
         <div>
           <p className="eyebrow">HOST DISPLAY</p>
@@ -11,7 +11,7 @@ export default function HostShell({ session, children, aside }) {
         </div>
         <div className="host-stats">{aside}</div>
       </header>
-      <main className="host-grid">{children}</main>
+      <main className={`host-grid ${variant ? `host-grid-${variant}` : ''}`}>{children}</main>
     </div>
   );
 }

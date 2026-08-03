@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import HostShell from '../components/host/HostShell';
-import QRJoinCard from '../components/host/QRJoinCard';
 import LiveRoomView from '../components/host/LiveRoomView';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { useParticipants } from '../hooks/useParticipants';
@@ -116,6 +115,7 @@ export default function HostDisplay() {
   return (
     <HostShell
       session={session}
+      variant="salon"
       aside={
         <>
           <span className="badge">참여자 {participants.length}</span>
@@ -129,18 +129,9 @@ export default function HostDisplay() {
         responses={visibleResponses}
         participants={participants}
         session={session}
+        sessionId={sessionId}
         likeEffects={likeEffects}
       />
-
-      <aside className="host-aside stack gap-lg">
-        <section className="panel">
-          <div className="panel-header compact">
-            <h2>참여 QR</h2>
-            <span className="badge">Live</span>
-          </div>
-          <QRJoinCard sessionId={sessionId} />
-        </section>
-      </aside>
     </HostShell>
   );
 }
