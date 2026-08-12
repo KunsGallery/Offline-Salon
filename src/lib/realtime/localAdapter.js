@@ -656,8 +656,8 @@ const localAdapter = {
     return session;
   },
 
-  joinParticipant(sessionId, participantId, nickname) {
-    return this.upsertParticipant(sessionId, participantId, { nickname });
+  joinParticipant(sessionId, participantId, nickname, avatar = null) {
+    return this.upsertParticipant(sessionId, participantId, { nickname, avatar });
   },
 
   touchParticipant(sessionId, participantId) {

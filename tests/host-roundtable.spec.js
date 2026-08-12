@@ -106,7 +106,7 @@ test('nickname remains legible when a dark poster theme is active', async ({ pag
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/client/session_roundtable');
 
-  const nickname = page.getByLabel('닉네임');
+  const nickname = page.getByRole('textbox', { name: '닉네임' });
   await nickname.fill('테스트닉네임');
   await expect(nickname).toHaveValue('테스트닉네임');
   const colors = await nickname.evaluate((node) => {
@@ -116,7 +116,9 @@ test('nickname remains legible when a dark poster theme is active', async ({ pag
   expect(colors.color).toBe('rgb(17, 24, 39)');
   expect(colors.fill).toBe('rgb(17, 24, 39)');
 
-  await page.getByRole('button', { name: '다음' }).click();
+  await expect(page.locator('.avatar-builder')).toBeVisible();
+  await page.getByRole('button', { name: '모스' }).click();
+  await page.getByRole('button', { name: '이 캐릭터로 입장' }).click();
   await expect(page.getByRole('heading', { name: '오늘 작품을 보며 가장 오래 머문 생각은 무엇인가요?' })).toBeVisible();
   expect(consoleErrors.filter((message) => message.includes('Maximum update depth exceeded'))).toEqual([]);
 });
@@ -158,7 +160,60 @@ test('returning from artwork mode clears the hidden activity question when no pu
   const participantPage = await context.newPage();
   await participantPage.setViewportSize({ width: 390, height: 844 });
   await participantPage.goto('/client/session_roundtable');
-  await expect(participantPage.getByRole('heading', { name: '아직 활성화된 질문이 없습니다.' })).toBeVisible();
+  await expect(participantPage.getByRole('heading', { name: '대기자님의 자리가 준비됐어요.' })).toBeVisible();
   await expect(participantPage.getByText('이 작품에 제목을 붙인다면?')).toHaveCount(0);
   await participantPage.close();
+});
+
+test('lobby seats joined participants as chosen vector characters', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.questions = [];
+  session.stage = { mode: 'lobby', page: 1, blackout: false };
+  session.participants = {
+    guest_1: { participantId: 'guest_1', nickname: '모스', avatar: { shape: 'diamond', color: 'moss' }, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:00:00.000Z' },
+    guest_2: { participantId: 'guest_2', nickname: '코발트', avatar: { shape: 'arch', color: 'cobalt' }, joinedAt: '2026-08-03T09:01:00.000Z', lastSeenAt: '2026-08-03T09:01:00.000Z' },
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_roundtable');
+  await expect(page.getByTestId('salon-lobby')).toBeVisible();
+  await expect(page.locator('.lobby-person')).toHaveCount(2);
+  await expect(page.getByText('질문이 시작되면')).toHaveCount(0);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth || document.documentElement.scrollHeight > document.documentElement.clientHeight);
+  expect(overflow).toBe(false);
+});
+
+test('admin adopts a submitted title and opens the final artwork gallery', async ({ page, context }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = 'art_title_question';
+  session.stage = { mode: 'artwork', artworkId: 'work_1', phase: 'vote', questionId: 'art_title_question', blackout: false };
+  session.artworks = [
+    { id: 'work_1', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', order: 0 },
+    { id: 'work_2', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', order: 1, adoptedTitle: '먼저 채택된 제목', adoptedResponseId: 'caption_previous' },
+  ];
+  session.artworkSecrets = { work_1: { id: 'work_1', title: '비공개 원제', artist: '작가' } };
+  session.questions = [{ id: 'art_title_question', title: '이 작품에 제목을 붙인다면?', type: 'artwork-title', internal: true, isActive: true, artworkId: 'work_1', order: 0 }];
+  session.responses = [
+    { id: 'caption_1', questionId: 'art_title_question', participantId: 'guest_1', nickname: '하린', value: '달이 머문 자리', likes: 4, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:00:00.000Z', updatedAt: '2026-08-03T09:00:00.000Z' },
+    { id: 'caption_2', questionId: 'art_title_question', participantId: 'guest_2', nickname: '지우', value: '푸른 침묵', likes: 2, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:01:00.000Z', updatedAt: '2026-08-03T09:01:00.000Z' },
+  ];
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/remote/session_roundtable');
+  const captionButton = page.locator('.remote-caption-picker button').filter({ hasText: '달이 머문 자리' });
+  await captionButton.click();
+  await expect(captionButton).toContainText('채택됨');
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.artworks[0].adoptedTitle, STORAGE_KEY)).toBe('달이 머문 자리');
+  await page.locator('footer .remote-next').click();
+  const hostPage = await context.newPage();
+  await hostPage.setViewportSize({ width: 1440, height: 900 });
+  await hostPage.goto('/host/session_roundtable');
+  await expect(hostPage.locator('.artwork-gallery-stage')).toBeVisible();
+  await expect(hostPage.locator('.artwork-gallery-grid figure')).toHaveCount(2);
+  await expect(hostPage.getByRole('heading', { name: '달이 머문 자리' })).toBeVisible();
+  await expect(hostPage.getByRole('heading', { name: '먼저 채택된 제목' })).toBeVisible();
+  await hostPage.close();
 });

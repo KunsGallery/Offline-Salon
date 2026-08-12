@@ -212,7 +212,7 @@ function ArtworkStudio({ session, activeQuestion }) {
   };
 
   return <section className="stack gap-lg">
-    {activeId ? <div className="active-media-controls"><strong>현재 작품 진행</strong><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn" onClick={() => setPhase('vote')}>투표</button><button className="btn primary" onClick={() => setPhase('reveal')}>정답 공개</button><button className="btn danger" onClick={() => realtime.updateSession(session.id, questionModePatch(session, activeQuestion))}>종료</button></div> : null}
+    {activeId ? <div className="active-media-controls"><strong>현재 작품 진행</strong><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn primary" onClick={() => setPhase('vote')}>투표</button><button className="btn" onClick={() => setPhase('reveal')}>원제 참고</button><button className="btn danger" onClick={() => realtime.updateSession(session.id, questionModePatch(session, activeQuestion))}>종료</button></div> : null}
     <div className="asset-library-toolbar"><div><strong>작품 라이브러리</strong><span>순서 변경·수정·복제·다른 세션 가져오기를 지원합니다.</span></div><button className="btn" type="button" disabled={busy} onClick={importFromSession}>다른 세션에서 가져오기</button></div>
     <div className="asset-grid">{artworks.map((artwork, index) => <article className={`asset-card ${activeId === artwork.id ? 'active' : ''}`} key={artwork.id}>
       <img src={artwork.imageUrl} alt={artwork.title || '작품'} /><div><strong>{artwork.title || '제목 미정'}</strong><span>{artwork.artist || '작가 미정'}</span>

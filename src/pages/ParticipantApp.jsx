@@ -11,7 +11,7 @@ import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { createParticipantId } from '../lib/ids';
 import { safeJoin } from '../lib/format';
-import { ArtworkParticipantView, PdfParticipantView } from '../components/media/LiveMediaViews';
+import { ArtworkGalleryParticipantView, ArtworkParticipantView, PdfParticipantView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 
 function storageKey(sessionId, key) {
@@ -161,11 +161,11 @@ export default function ParticipantApp() {
     );
   }
 
-  const handleJoin = async (nextNickname) => {
+  const handleJoin = async (nextNickname, avatar) => {
     setIsJoining(true);
     try {
       const nextParticipantId = participantId || createParticipantId(sessionId);
-      await Promise.resolve(realtime.joinParticipant(sessionId, nextParticipantId, nextNickname));
+      await Promise.resolve(realtime.joinParticipant(sessionId, nextParticipantId, nextNickname, avatar));
       setParticipantId(nextParticipantId);
       setNickname(nextNickname);
       setActionError('');
@@ -249,10 +249,14 @@ export default function ParticipantApp() {
     return <div style={accentStyle}><ArtworkParticipantView artwork={artwork} phase={session.stage.phase} responses={visibleResponses} myResponse={myResponse} onSubmit={handleSubmit} onLike={handleToggleLike} participantId={participantId} /></div>;
   }
 
-  if (!currentQuestion) {
+  if (session.stage?.mode === 'gallery') {
+    return <div style={accentStyle}><ArtworkGalleryParticipantView session={session} /></div>;
+  }
+
+  if (session.stage?.mode === 'lobby' || !currentQuestion) {
     return (
       <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
-        <WaitingScreen title="아직 활성화된 질문이 없습니다." message="관리자가 질문을 시작하면 자동으로 전환됩니다." />
+        <WaitingScreen title={`${nickname}님의 자리가 준비됐어요.`} message="앞 화면에서 내 캐릭터와 함께 도착한 사람들을 만나보세요." />
       </main>
     );
   }

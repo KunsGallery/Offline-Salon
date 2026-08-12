@@ -121,6 +121,7 @@ function fromParticipantDoc(participantId, data) {
   return normalizeParticipant(participantId, {
     participantId,
     nickname: data.nickname,
+    avatar: data.avatar || null,
     joinedAt: toIso(data.joinedAt),
     lastSeenAt: toIso(data.lastSeenAt),
   });
@@ -295,7 +296,7 @@ const firestoreAdapter = {
         logoUrl: null,
         backgroundMode: 'dark',
       },
-      stage: { mode: 'questions', page: 1 },
+      stage: { mode: 'lobby', page: 1 },
       artworks: [],
       decks: [],
     });
@@ -761,13 +762,16 @@ const firestoreAdapter = {
   },
 
   async upsertParticipant(sessionId, participantId, data = {}) {
+    const participantPatch = {
+      lastSeenAt: data.lastSeenAt || serverTimestamp(),
+    };
+    if (Object.prototype.hasOwnProperty.call(data, 'nickname')) participantPatch.nickname = data.nickname;
+    if (Object.prototype.hasOwnProperty.call(data, 'avatar')) participantPatch.avatar = data.avatar;
+    if (data.joinedAt) participantPatch.joinedAt = data.joinedAt;
+    else if (!participantCache.get(sessionId)?.some((item) => item.participantId === participantId)) participantPatch.joinedAt = serverTimestamp();
     await setDoc(
       doc(participantsCol(sessionId), participantId),
-      {
-        nickname: data.nickname ?? null,
-        joinedAt: data.joinedAt || serverTimestamp(),
-        lastSeenAt: data.lastSeenAt || serverTimestamp(),
-      },
+      participantPatch,
       { merge: true },
     );
     return normalizeParticipant(participantId, {
@@ -843,8 +847,8 @@ const firestoreAdapter = {
     });
   },
 
-  async joinParticipant(sessionId, participantId, nickname) {
-    return this.upsertParticipant(sessionId, participantId, { nickname });
+  async joinParticipant(sessionId, participantId, nickname, avatar = null) {
+    return this.upsertParticipant(sessionId, participantId, { nickname, avatar });
   },
 
   async touchParticipant(sessionId, participantId) {

@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import HostShell from '../components/host/HostShell';
 import LiveRoomView from '../components/host/LiveRoomView';
+import LobbyHostView from '../components/host/LobbyHostView';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
 import { useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
-import { ArtworkHostView, PdfHostView } from '../components/media/LiveMediaViews';
+import { ArtworkGalleryHostView, ArtworkHostView, PdfHostView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 
 export default function HostDisplay() {
@@ -110,6 +111,14 @@ export default function HostDisplay() {
   if (session.stage?.mode === 'artwork') {
     const artwork = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
     return <div style={sessionThemeStyle(session)}><ArtworkHostView session={session} artwork={artwork} responses={visibleResponses} /></div>;
+  }
+
+  if (session.stage?.mode === 'gallery') {
+    return <div style={sessionThemeStyle(session)}><ArtworkGalleryHostView session={session} /></div>;
+  }
+
+  if (session.stage?.mode === 'lobby' || !activeQuestion) {
+    return <HostShell session={session} variant="salon" aside={<span className="badge">참여자 {participants.length}</span>}><LobbyHostView session={session} participants={participants} sessionId={sessionId} /></HostShell>;
   }
 
   return (

@@ -67,7 +67,7 @@ test('artwork image and private title can be registered and edited', async ({ pa
   await card.getByRole('button', { name: '화면에 띄우기' }).click();
   await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
   await expect(page.locator('.stage-preview.stage-artwork')).toBeVisible();
-  await page.locator('.live-operation-card').getByRole('button', { name: '3. 정답 공개' }).click();
+  await page.locator('.live-operation-card').getByRole('button', { name: '원제 참고' }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.reveal?.title)).toBe('테스트 작품명');
 });
 

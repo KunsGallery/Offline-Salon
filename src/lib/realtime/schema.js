@@ -126,6 +126,7 @@ export function normalizeParticipant(participantId, participant) {
   return cloneParticipant({
     participantId,
     nickname: participant?.nickname ?? null,
+    avatar: participant?.avatar && typeof participant.avatar === 'object' ? { ...participant.avatar } : null,
     joinedAt: participant?.joinedAt || nowIso(),
     lastSeenAt: participant?.lastSeenAt || nowIso(),
   });
@@ -158,7 +159,7 @@ export function normalizeSession(session) {
       posterStoragePath: session.branding?.posterStoragePath || null,
     },
     stage: {
-      mode: session.stage?.mode || 'questions',
+      mode: session.stage?.mode || 'lobby',
       artworkId: session.stage?.artworkId || null,
       phase: session.stage?.phase || null,
       runId: session.stage?.runId || null,
@@ -280,7 +281,7 @@ export function createSessionTemplate(input = {}) {
       logoUrl: null,
       backgroundMode: 'dark',
     },
-    stage: { mode: 'questions', page: 1 },
+    stage: { mode: 'lobby', page: 1 },
     artworks: [],
     artworkSecrets: {},
     decks: [],

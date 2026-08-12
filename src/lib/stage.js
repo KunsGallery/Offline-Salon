@@ -9,6 +9,6 @@ export function questionModePatch(session, activeQuestion = null) {
 
   return {
     currentQuestionId: shouldClearQuestion ? null : currentQuestionId,
-    stage: { mode: 'questions', page: 1, blackout: false },
+    stage: { mode: shouldClearQuestion || !currentQuestionId ? 'lobby' : 'questions', page: 1, blackout: false },
   };
 }
