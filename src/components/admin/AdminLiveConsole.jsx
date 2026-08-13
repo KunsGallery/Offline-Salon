@@ -24,7 +24,7 @@ export default function AdminLiveConsole({ session, activeQuestion, responses, p
   const visibleResponses = useMemo(() => responses.filter((item) => item.hidden !== true), [responses]);
   const adoptedCount = (session.artworks || []).filter((item) => item.adoptedTitle).length;
   const artworkCount = (session.artworks || []).length;
-  const galleryReady = artworkCount > 0 && adoptedCount === artworkCount;
+  const galleryReady = artworkCount > 0;
 
   const run = async (action) => {
     if (busy) return;
@@ -39,7 +39,7 @@ export default function AdminLiveConsole({ session, activeQuestion, responses, p
   const adoptTitle = async (response) => {
     if (!artwork || !response) return;
     const adoptedTitle = Array.isArray(response.value) ? response.value.join(' ') : String(response.value || '').trim();
-    await realtime.updateArtwork(session.id, artwork.id, { adoptedTitle, adoptedResponseId: response.id, adoptedLikes: Number(response.likes || 0), adoptedAt: new Date().toISOString() });
+    await realtime.updateArtwork(session.id, artwork.id, { adoptedTitle, adoptedResponseId: response.id, adoptedQuestionId: response.questionId || stage.questionId || null, adoptedLikes: Number(response.likes || 0), adoptedAt: new Date().toISOString() });
     await realtime.updateSession(session.id, { stage: { ...stage, phase: 'reveal', reveal: { title: adoptedTitle, artist: artworkSecret.artist || '', description: artworkSecret.description || '' }, blackout: false }, showResults: true });
   };
 
@@ -56,7 +56,7 @@ export default function AdminLiveConsole({ session, activeQuestion, responses, p
 
       <article className="panel live-operation-card">
         <header><p className="eyebrow">LIVE OPERATIONS</p><h2>진행 컨트롤</h2><p className="muted">앞 화면에 즉시 반영됩니다.</p></header>
-        <div className="operation-block"><span>화면 모드</span><button className="btn" disabled={busy} onClick={() => run(showLobby)}>대기방</button><button className="btn" disabled={busy || !galleryReady} title={galleryReady ? '' : `전체 ${artworkCount}개 중 ${adoptedCount}개 채택 완료`} onClick={() => run(showGallery)}>전체 갤러리 ({adoptedCount}/{artworkCount})</button><button className={`btn ${stage.blackout ? 'primary' : ''}`} disabled={busy} onClick={() => run(() => setView({ blackout: !stage.blackout }))}>{stage.blackout ? '화면 다시 표시' : '화면 잠시 가리기'}</button></div>
+        <div className="operation-block"><span>화면 모드</span><button className="btn" disabled={busy} onClick={() => run(showLobby)}>대기방</button><button className="btn" disabled={busy || !galleryReady} title={galleryReady ? '' : '등록된 작품이 없습니다.'} onClick={() => run(showGallery)}>전체 갤러리 ({adoptedCount}/{artworkCount})</button><button className={`btn ${stage.blackout ? 'primary' : ''}`} disabled={busy} onClick={() => run(() => setView({ blackout: !stage.blackout }))}>{stage.blackout ? '화면 다시 표시' : '화면 잠시 가리기'}</button></div>
         {stage.mode === 'artwork' && artwork ? <div className="operation-block"><span>작품 활동</span><button className="btn" disabled={busy} onClick={() => run(() => phase('collect'))}>1. 제목 받기</button><button className="btn primary" disabled={busy} onClick={() => run(() => phase('vote'))}>2. 투표 열기</button><button className="btn" disabled={busy} onClick={() => run(() => phase('reveal'))}>원제 참고</button></div> : null}
         {stage.mode === 'artwork' && artwork && visibleResponses.length ? <div className="caption-adoption"><div><strong>최종 작품명 채택</strong><span>좋아요 순위를 참고해 제목 하나를 선택하세요.</span></div>{[...visibleResponses].sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0)).map((response) => <button className={artwork.adoptedResponseId === response.id ? 'selected' : ''} disabled={busy} key={response.id} onClick={() => run(() => adoptTitle(response))}><span>{Array.isArray(response.value) ? response.value.join(' ') : response.value}</span><b>♥ {response.likes || 0}</b><em>{artwork.adoptedResponseId === response.id ? '채택됨' : '채택'}</em></button>)}</div> : null}
         {stage.mode === 'pdf' && deck ? <><div className="operation-block"><span>페이지</span><button className="btn" disabled={busy || page <= 1} onClick={() => run(() => setPage(page - 1))}>← 이전</button><label><input type="number" min="1" max={deck.pageCount} value={page} onChange={(event) => run(() => setPage(Number(event.target.value)))} /> / {deck.pageCount}</label><button className="btn primary" disabled={busy || page >= deck.pageCount} onClick={() => run(() => setPage(page + 1))}>다음 →</button></div><div className="operation-block"><span>보기</span><button className={`btn ${stage.fitMode !== 'width' ? 'primary' : ''}`} onClick={() => run(() => setView({ fitMode: 'fit' }))}>화면 맞춤</button><button className={`btn ${stage.fitMode === 'width' ? 'primary' : ''}`} onClick={() => run(() => setView({ fitMode: 'width' }))}>너비 맞춤</button><button className="btn" onClick={() => run(() => setView({ zoom: Math.max(.6, Number(stage.zoom || 1) - .1) }))}>−</button><b>{Math.round(Number(stage.zoom || 1) * 100)}%</b><button className="btn" onClick={() => run(() => setView({ zoom: Math.min(2, Number(stage.zoom || 1) + .1) }))}>＋</button></div>{pageLinks.length ? <div className="operation-links"><span>현재 페이지 링크</span>{pageLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label || link.url} ↗</a>)}</div> : null}</> : null}

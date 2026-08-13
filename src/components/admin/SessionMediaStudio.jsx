@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { buildBranding, extractPalette, sessionThemeStyle } from '../../lib/colorPalette';
 import { createId } from '../../lib/ids';
+import { artworkReveal, findArtworkActivityQuestion } from '../../lib/artworkActivity';
 import { getMediaStorageStatus, removeMedia, uploadMedia } from '../../lib/media';
 import { inspectPdf } from '../../lib/pdf';
 import { questionModePatch } from '../../lib/stage';
@@ -160,6 +161,17 @@ function ArtworkStudio({ session, activeQuestion }) {
   const start = async (artwork) => {
     setBusy(true); setError('');
     try {
+      const existingQuestion = findArtworkActivityQuestion(session, artwork);
+      if (existingQuestion || artwork.adoptedTitle) {
+        if (existingQuestion) await Promise.resolve(realtime.activateQuestion(session.id, existingQuestion.id));
+        await Promise.resolve(realtime.updateSession(session.id, {
+          currentQuestionId: existingQuestion?.id || null,
+          stage: { mode: 'artwork', artworkId: artwork.id, phase: artwork.adoptedTitle ? 'reveal' : 'collect', runId: existingQuestion?.runId || null, questionId: existingQuestion?.id || null, page: 1, reveal: artwork.adoptedTitle ? artworkReveal(artwork, secrets[artwork.id]) : null, blackout: false },
+          showResults: Boolean(artwork.adoptedTitle),
+          status: 'live',
+        }));
+        return;
+      }
       const runId = createId('run');
       const question = await Promise.resolve(realtime.createQuestion(session.id, { title: '이 작품에 제목을 붙인다면?', description: '정답은 잠시 잊고 떠오르는 제목을 적어보세요.', type: 'artwork-title', artworkId: artwork.id, runId, internal: true }));
       await Promise.resolve(realtime.activateQuestion(session.id, question.id));

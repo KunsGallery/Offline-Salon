@@ -6,6 +6,7 @@ import { useResponses } from '../hooks/useResponses';
 import { useArtworkSecrets } from '../hooks/useArtworkSecrets';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { createId } from '../lib/ids';
+import { artworkReveal, findArtworkActivityQuestion } from '../lib/artworkActivity';
 import { PdfPageCanvas } from '../components/media/LiveMediaViews';
 
 export default function RemoteControl() {
@@ -52,6 +53,17 @@ export default function RemoteControl() {
     try { await Promise.resolve(action()); } catch (reason) { setError(reason.message || '명령을 적용하지 못했습니다.'); } finally { setBusy(false); }
   };
   const startArtwork = async (item) => {
+    const existingQuestion = findArtworkActivityQuestion(session, item);
+    if (existingQuestion || item.adoptedTitle) {
+      if (existingQuestion) await Promise.resolve(realtime.activateQuestion(session.id, existingQuestion.id));
+      await Promise.resolve(realtime.updateSession(session.id, {
+        currentQuestionId: existingQuestion?.id || null,
+        stage: { mode: 'artwork', artworkId: item.id, phase: item.adoptedTitle ? 'reveal' : 'collect', runId: existingQuestion?.runId || null, questionId: existingQuestion?.id || null, page: 1, reveal: item.adoptedTitle ? artworkReveal(item, item) : null, blackout: false },
+        showResults: Boolean(item.adoptedTitle),
+        status: 'live',
+      }));
+      return;
+    }
     const runId = createId('run');
     const question = await Promise.resolve(realtime.createQuestion(session.id, { title: '이 작품에 제목을 붙인다면?', description: '떠오르는 제목을 적어보세요.', type: 'artwork-title', artworkId: item.id, runId, internal: true }));
     await Promise.resolve(realtime.activateQuestion(session.id, question.id));
@@ -65,12 +77,12 @@ export default function RemoteControl() {
   const adoptTitle = async (response) => {
     if (!artwork || !response) return;
     const adoptedTitle = Array.isArray(response.value) ? response.value.join(' ') : String(response.value || '').trim();
-    await realtime.updateArtwork(session.id, artwork.id, { adoptedTitle, adoptedResponseId: response.id, adoptedLikes: Number(response.likes || 0), adoptedAt: new Date().toISOString() });
+    await realtime.updateArtwork(session.id, artwork.id, { adoptedTitle, adoptedResponseId: response.id, adoptedQuestionId: response.questionId || stage.questionId || null, adoptedLikes: Number(response.likes || 0), adoptedAt: new Date().toISOString() });
     await realtime.updateSession(session.id, { stage: { ...stage, phase: 'reveal', reveal: { title: adoptedTitle, artist: artwork.artist || '', description: artwork.description || '' }, blackout: false }, showResults: true });
   };
   const adoptedCount = (session.artworks || []).filter((item) => item.adoptedTitle).length;
   const artworkCount = (session.artworks || []).length;
-  const galleryReady = artworkCount > 0 && adoptedCount === artworkCount;
+  const galleryReady = artworkCount > 0;
 
   return <main className="remote-control remote-v2" style={sessionThemeStyle(session)}>
     <header><div><p className="eyebrow">OFFLINE SALON REMOTE</p><h1>{session.title}</h1></div><div className="remote-connection"><span className={online && !sessionError ? 'online' : 'offline'}>● {online && !sessionError ? '연결됨' : '연결 끊김'}</span><button className={awake ? 'active' : ''} onClick={toggleWakeLock}>{awake ? '화면 유지 중' : '화면 켜두기'}</button></div></header>
@@ -84,8 +96,8 @@ export default function RemoteControl() {
       {error || sessionError ? <p className="remote-error">{error || sessionError.message}</p> : busy ? <p className="remote-command-status">명령 적용 중…</p> : <p className="remote-command-status">마지막 동기화 {new Date(session.updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>}
     </section>
 
-    <section className="remote-assets"><div><p className="eyebrow">ARTWORKS</p><h2>작품 선택</h2></div><div className="remote-asset-grid">{artworks.map((item) => <button disabled={busy} key={item.id} onClick={() => run(() => startArtwork(item))}><img src={item.imageUrl} alt={item.title || '작품'} /><span>{item.title || '제목 미정'}</span></button>)}</div></section>
+    <section className="remote-assets"><div><p className="eyebrow">ARTWORKS</p><h2>작품 선택</h2></div><div className="remote-asset-grid">{artworks.map((item) => <button disabled={busy} key={item.id} onClick={() => run(() => startArtwork(item))}><img src={item.imageUrl} alt={item.title || '작품'} /><span>{item.adoptedTitle || item.title || '제목 미정'}{item.adoptedTitle ? ' · 채택 완료' : ''}</span></button>)}</div></section>
     <section className="remote-assets"><div><p className="eyebrow">PRESENTATIONS</p><h2>PDF 선택</h2></div><div className="remote-asset-grid">{(session.decks || []).map((item) => <button disabled={busy} key={item.id} onClick={() => run(() => realtime.updateSession(session.id, { stage: { mode: 'pdf', deckId: item.id, page: 1, fitMode: 'fit', zoom: 1, blackout: false }, status: 'live' }))}><img src={item.thumbnailUrl} alt={`${item.title} 표지`} /><span>{item.title}</span></button>)}</div></section>
-    <footer><button onClick={() => window.open(`${window.location.origin}/host/${session.id}`, '_blank', 'noopener,noreferrer')}>화면 보기</button><button className="remote-home" disabled={busy} onClick={() => run(showLobby)}>대기방</button>{deck ? <button className="remote-next" disabled={busy || page >= deck.pageCount} onClick={() => run(() => setPage(page + 1))}>다음 장 →</button> : <button className="remote-next" disabled={busy || !galleryReady} title={galleryReady ? '' : `전체 ${artworkCount}개 중 ${adoptedCount}개 채택 완료`} onClick={() => run(showGallery)}>갤러리 {adoptedCount}/{artworkCount}</button>}</footer>
+    <footer><button onClick={() => window.open(`${window.location.origin}/host/${session.id}`, '_blank', 'noopener,noreferrer')}>화면 보기</button><button className="remote-home" disabled={busy} onClick={() => run(showLobby)}>대기방</button>{deck ? <button className="remote-next" disabled={busy || page >= deck.pageCount} onClick={() => run(() => setPage(page + 1))}>다음 장 →</button> : <button className="remote-next" disabled={busy || !galleryReady} title={galleryReady ? '' : '등록된 작품이 없습니다.'} onClick={() => run(showGallery)}>갤러리 {adoptedCount}/{artworkCount}</button>}</footer>
   </main>;
 }
