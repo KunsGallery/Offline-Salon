@@ -66,18 +66,19 @@ function bucket(map, key) {
 
 function emit(sessionId, questionId) {
   notifyKinds.sessions();
-  if (sessionId) {
-    notifyKinds.session(sessionId);
-    notifyKinds.questions(sessionId);
-    notifyKinds.responses(sessionId);
-    notifyKinds.participants(sessionId);
-    if (questionId) {
-      notifyKinds.responsesByQuestion(sessionId, questionId);
+  const sessionIds = sessionId ? [sessionId] : Object.keys(state.sessions || {});
+  sessionIds.forEach((id) => {
+    notifyKinds.session(id);
+    notifyKinds.questions(id);
+    notifyKinds.responses(id);
+    notifyKinds.participants(id);
+    if (questionId && id === sessionId) {
+      notifyKinds.responsesByQuestion(id, questionId);
     } else {
-      const session = state.sessions[sessionId];
-      (session?.questions || []).forEach((question) => notifyKinds.responsesByQuestion(sessionId, question.id));
+      const session = state.sessions[id];
+      (session?.questions || []).forEach((question) => notifyKinds.responsesByQuestion(id, question.id));
     }
-  }
+  });
 }
 
 function persist() {

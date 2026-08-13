@@ -90,7 +90,15 @@ export function ArtworkHostView({ session, artwork, responses }) {
 
 export function ArtworkGalleryHostView({ session }) {
   const artworks = session.artworks || [];
-  return <main className="artwork-gallery-stage"><header><div><h1>우리가 이름 붙인 작품들</h1><p>오늘 이 자리에서 발견된 시선과 언어를 한곳에 모았습니다.</p></div><strong>{artworks.filter((item) => item.adoptedTitle).length}<span> / {artworks.length}</span></strong></header>{artworks.length ? <section className="artwork-gallery-grid">{artworks.map((artwork, index) => <figure className={artwork.adoptedTitle ? '' : 'pending'} key={artwork.id}><div><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><span>{String(index + 1).padStart(2, '0')}</span></div><figcaption><h2>{artwork.adoptedTitle || '제목 채택 대기'}</h2><p>{artwork.adoptedTitle ? '참여자들이 함께 지은 제목' : '이 작품의 최종 제목을 선택해 주세요.'}</p></figcaption></figure>)}</section> : <section className="artwork-gallery-empty"><h2>등록된 작품이 없습니다.</h2><p>작품을 등록하고 제목 활동을 시작해 주세요.</p></section>}</main>;
+  const galleryRef = useRef(null);
+  const scrollPosition = Math.max(1, Number(session.stage?.page || 1));
+  useEffect(() => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+    const top = Math.min(gallery.scrollHeight - gallery.clientHeight, (scrollPosition - 1) * gallery.clientHeight * 0.72);
+    gallery.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }, [scrollPosition, artworks.length]);
+  return <main className="artwork-gallery-stage"><header><h1>서로의 시선이 머문 자리</h1></header>{artworks.length ? <section className="artwork-gallery-grid" ref={galleryRef}>{artworks.map((artwork, index) => <figure className={artwork.adoptedTitle ? '' : 'pending'} key={artwork.id}><div><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><span>{String(index + 1).padStart(2, '0')}</span></div><figcaption><h2>{artwork.adoptedTitle || '제목 채택 대기'}</h2><p>{artwork.adoptedTitle ? '참여자들이 함께 지은 제목' : '이 작품의 최종 제목을 선택해 주세요.'}</p></figcaption></figure>)}</section> : <section className="artwork-gallery-empty"><h2>등록된 작품이 없습니다.</h2><p>작품을 등록하고 제목 활동을 시작해 주세요.</p></section>}</main>;
 }
 
 export function ArtworkGalleryParticipantView({ session }) {
