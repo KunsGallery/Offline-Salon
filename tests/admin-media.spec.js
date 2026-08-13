@@ -15,13 +15,16 @@ async function imageBuffer(page, color = '#cf248d') {
 
 function pdfBuffer() {
   const stream = 'BT /F1 28 Tf 72 700 Td (Offline Salon PDF) Tj ET';
+  const secondStream = 'BT /F1 28 Tf 72 700 Td (Second Page) Tj ET';
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Pages /Kids [3 0 R 7 0 R] /Count 2 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
     '<< /Type /Annot /Subtype /Link /Rect [72 650 280 690] /Border [0 0 0] /A << /S /URI /URI (https://example.com) >> >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 8 0 R >>',
+    `<< /Length ${secondStream.length} >>\nstream\n${secondStream}\nendstream`,
   ];
   let source = '%PDF-1.4\n';
   const offsets = [0];
@@ -77,13 +80,24 @@ test('PDF is analyzed, linked and registered', async ({ page, context }) => {
   await page.getByPlaceholder('발표 자료명').fill('살롱 발표 자료');
   await page.getByRole('button', { name: 'PDF 등록' }).click();
   const card = page.locator('.asset-card').filter({ hasText: '살롱 발표 자료' });
-  await expect(card).toContainText('1 pages');
+  await expect(card).toContainText('2 pages');
   await expect(card).toContainText('링크 1개');
   await card.getByRole('button', { name: '발표 시작' }).click();
   await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
   await expect(page.locator('.stage-preview.stage-pdf')).toBeVisible();
   await expect(page.locator('.stage-preview.stage-pdf .salon-pdf-canvas')).toHaveClass(/ready/);
   await expect(page.locator('.operation-links').getByRole('link')).toHaveAttribute('href', 'https://example.com/');
+  const previewCanvases = page.locator('.stage-preview.stage-pdf .salon-pdf-canvas canvas');
+  await expect(previewCanvases).toHaveCount(2);
+  const activeBefore = await previewCanvases.evaluateAll((canvases) => canvases.findIndex((canvas) => canvas.classList.contains('active')));
+  const canvasStyle = await page.locator('.stage-preview.stage-pdf .salon-pdf-canvas canvas.active').evaluate((canvas) => ({ background: getComputedStyle(canvas).backgroundColor, transition: getComputedStyle(canvas).transitionDuration }));
+  expect(canvasStyle.background).toBe('rgba(0, 0, 0, 0)');
+  expect(canvasStyle.transition).not.toBe('0s');
+  await page.locator('.live-operation-card').getByLabel('PDF 확대 배율').selectOption('3');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.zoom)).toBe(3);
+  await page.locator('.live-operation-card').getByRole('button', { name: '다음 →' }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.page)).toBe(2);
+  await expect.poll(() => previewCanvases.evaluateAll((canvases) => canvases.findIndex((canvas) => canvas.classList.contains('active')))).not.toBe(activeBefore);
 
   await page.evaluate(() => {
     const key = 'offline-salon:interactive-studio-pro:v1';

@@ -1,18 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pdfDocumentOptions, pdfjs } from '../../lib/pdf';
+import { clampPdfZoom, PDF_ZOOM_PRESETS } from '../../lib/pdfView';
 import { safeJoin } from '../../lib/format';
 
 export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, compact = false }) {
   const hostRef = useRef(null);
-  const canvasRef = useRef(null);
+  const firstCanvasRef = useRef(null);
+  const secondCanvasRef = useRef(null);
+  const activeCanvasRef = useRef(-1);
+  const previousPageRef = useRef(pageNumber);
   const [pdfDocument, setPdfDocument] = useState(null);
   const [status, setStatus] = useState('loading');
   const [layoutVersion, setLayoutVersion] = useState(0);
+  const [activeCanvas, setActiveCanvas] = useState(-1);
+  const [direction, setDirection] = useState('forward');
   useEffect(() => {
     if (!url) return undefined;
     let active = true;
     setPdfDocument(null);
     setStatus('loading');
+    setActiveCanvas(-1);
+    activeCanvasRef.current = -1;
     const task = pdfjs.getDocument(pdfDocumentOptions({
       url,
       disableRange: true,
@@ -36,24 +44,38 @@ export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, comp
       if (!active) return null;
       setStatus('loading');
       const host = hostRef.current;
-      const canvas = canvasRef.current;
+      const nextCanvasIndex = activeCanvasRef.current === 0 ? 1 : 0;
+      const canvas = nextCanvasIndex === 0 ? firstCanvasRef.current : secondCanvasRef.current;
       const base = page.getViewport({ scale: 1 });
       const availableWidth = Math.max(40, host.clientWidth - (compact ? 2 : 16));
       const availableHeight = Math.max(40, host.clientHeight - (compact ? 2 : 16));
       const fitted = fitMode === 'width' ? availableWidth / base.width : Math.min(availableWidth / base.width, availableHeight / base.height);
-      const scale = Math.max(0.1, fitted * Math.min(2, Math.max(0.6, Number(zoom || 1))));
+      const scale = Math.max(0.1, fitted * clampPdfZoom(zoom));
       const viewport = page.getViewport({ scale });
       const outputScale = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.floor(viewport.width * outputScale);
       canvas.height = Math.floor(viewport.height * outputScale);
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
-      renderTask = page.render({ canvas, viewport, transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0] });
-      return renderTask.promise;
-    }).then(() => { if (active) setStatus('ready'); }).catch((error) => { if (active && error?.name !== 'RenderingCancelledException') setStatus('error'); });
+      renderTask = page.render({ canvas, viewport, background: 'rgba(0,0,0,0)', transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0] });
+      return renderTask.promise.then(() => nextCanvasIndex);
+    }).then((nextCanvasIndex) => {
+      if (!active || nextCanvasIndex === null) return;
+      setDirection(pageNumber >= previousPageRef.current ? 'forward' : 'backward');
+      previousPageRef.current = pageNumber;
+      activeCanvasRef.current = nextCanvasIndex;
+      setActiveCanvas(nextCanvasIndex);
+      setStatus('ready');
+    }).catch((error) => { if (active && error?.name !== 'RenderingCancelledException') setStatus('error'); });
     return () => { active = false; renderTask?.cancel(); };
   }, [compact, fitMode, layoutVersion, pageNumber, pdfDocument, zoom]);
-  return <div className={`salon-pdf-canvas ${status} ${compact ? 'compact' : ''}`} ref={hostRef}>{status === 'loading' && !compact ? <p>페이지 준비 중…</p> : null}{status === 'error' && !compact ? <p>PDF 페이지를 표시하지 못했습니다.</p> : null}<canvas ref={canvasRef} /></div>;
+  return <div className={`salon-pdf-canvas ${status} ${compact ? 'compact' : ''}`} data-direction={direction} ref={hostRef}>{status === 'loading' && activeCanvas < 0 && !compact ? <p>페이지 준비 중…</p> : null}{status === 'error' && !compact ? <p>PDF 페이지를 표시하지 못했습니다.</p> : null}<canvas className={activeCanvas === 0 ? 'active' : ''} ref={firstCanvasRef} /><canvas className={activeCanvas === 1 ? 'active' : ''} ref={secondCanvasRef} /></div>;
+}
+
+export function PdfZoomSelect({ value = 1, onChange, className = '' }) {
+  const normalized = clampPdfZoom(value);
+  const presets = PDF_ZOOM_PRESETS.includes(normalized) ? PDF_ZOOM_PRESETS : [...PDF_ZOOM_PRESETS, normalized].sort((a, b) => a - b);
+  return <label className={`pdf-zoom-select ${className}`.trim()}><span>배율</span><select aria-label="PDF 확대 배율" value={normalized} onChange={(event) => onChange(Number(event.target.value))}>{presets.map((preset) => <option key={preset} value={preset}>{Math.round(preset * 100)}%</option>)}</select></label>;
 }
 
 export function PdfHostView({ session, deck }) {

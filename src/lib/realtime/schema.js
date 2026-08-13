@@ -1,4 +1,5 @@
 import { createId } from '../ids';
+import { clampPdfZoom } from '../pdfView';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -167,7 +168,7 @@ export function normalizeSession(session) {
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),
       fitMode: session.stage?.fitMode || 'fit',
-      zoom: Math.min(2, Math.max(0.6, Number(session.stage?.zoom || 1))),
+      zoom: clampPdfZoom(session.stage?.zoom),
       blackout: session.stage?.blackout === true,
       reveal: session.stage?.reveal ? { ...session.stage.reveal } : null,
     },
