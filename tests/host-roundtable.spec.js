@@ -191,8 +191,8 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   session.currentQuestionId = 'art_title_question';
   session.stage = { mode: 'artwork', artworkId: 'work_1', phase: 'vote', questionId: 'art_title_question', blackout: false };
   session.artworks = [
-    { id: 'work_1', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', order: 0 },
-    { id: 'work_2', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', order: 1, adoptedTitle: '먼저 채택된 제목', adoptedResponseId: 'caption_previous' },
+    { id: 'work_1', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="800"%3E%3Crect width="40" height="800" fill="navy"/%3E%3C/svg%3E', order: 0 },
+    { id: 'work_2', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="40"%3E%3Crect width="800" height="40" fill="maroon"/%3E%3C/svg%3E', order: 1, adoptedTitle: '먼저 채택된 제목', adoptedResponseId: 'caption_previous' },
   ];
   session.artworkSecrets = { work_1: { id: 'work_1', title: '비공개 원제', artist: '작가' } };
   session.questions = [{ id: 'art_title_question', title: '이 작품에 제목을 붙인다면?', type: 'artwork-title', internal: true, isActive: true, artworkId: 'work_1', order: 0 }];
@@ -213,6 +213,15 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await hostPage.goto('/host/session_roundtable');
   await expect(hostPage.locator('.artwork-gallery-stage')).toBeVisible();
   await expect(hostPage.locator('.artwork-gallery-grid figure')).toHaveCount(2);
+  const galleryFrames = await hostPage.locator('.artwork-gallery-grid figure > div').evaluateAll((frames) => frames.map((frame) => {
+    const frameRect = frame.getBoundingClientRect();
+    const imageRect = frame.querySelector('img').getBoundingClientRect();
+    return {
+      square: Math.abs(frameRect.width - frameRect.height) < 1,
+      contained: imageRect.left >= frameRect.left && imageRect.top >= frameRect.top && imageRect.right <= frameRect.right && imageRect.bottom <= frameRect.bottom,
+    };
+  }));
+  expect(galleryFrames.every(({ square, contained }) => square && contained)).toBe(true);
   await expect(hostPage.getByRole('heading', { name: '달이 머문 자리' })).toBeVisible();
   await expect(hostPage.getByRole('heading', { name: '먼저 채택된 제목' })).toBeVisible();
   await hostPage.close();

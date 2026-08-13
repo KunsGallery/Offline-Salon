@@ -3019,9 +3019,10 @@ button {
 .salon-lobby-room::after { right: -3%; transform: rotate(8deg); }
 .lobby-table { width: min(56%, 900px); height: 47%; min-height: 260px; display: grid; place-items: center; position: absolute; left: 50%; top: 52%; transform: translate(-50%,-50%); border: 1px solid color-mix(in srgb, var(--room-lime) 24%, rgba(255,255,255,.13)); border-radius: 50%; background: radial-gradient(ellipse at 44% 32%, rgba(255,255,255,.1), transparent 34%), linear-gradient(155deg, color-mix(in srgb, var(--room-blue) 26%, #272029), #0c0d11 74%); box-shadow: inset 0 -30px 50px rgba(0,0,0,.44), 0 38px 52px rgba(0,0,0,.58); }
 .lobby-table::after { content: ""; width: 65%; height: 22px; position: absolute; left: 50%; bottom: -21px; transform: translateX(-50%); border-radius: 0 0 50% 50%; background: #06070a; box-shadow: 0 22px 40px rgba(0,0,0,.6); }
-.lobby-table > div { width: 76%; position: relative; z-index: 1; text-align: center; }
+.lobby-table > div { width: 84%; position: relative; z-index: 1; text-align: center; }
 .lobby-table span { color: color-mix(in srgb, var(--room-lime) 72%, white); font-size: .62rem; font-weight: 700; letter-spacing: .11em; }
-.lobby-table h1 { margin: 10px 0; color: #fffdf9; font-size: clamp(1.75rem,3.4vw,4.2rem); line-height: .98; text-wrap: balance; }
+.lobby-table h1 { margin: 10px 0; color: #fffdf9; font-size: clamp(1.4rem,2.5vw,3rem); line-height: 1.04; letter-spacing: -.025em; }
+.lobby-table h1 span { display: block; color: inherit; font: inherit; letter-spacing: inherit; white-space: nowrap; }
 .lobby-table p { color: rgba(255,255,255,.46); font-size: .72rem; }
 .lobby-people { position: absolute; z-index: 7; inset: 0; pointer-events: none; }
 .lobby-person { position: absolute; left: var(--person-x); top: var(--person-y); transform: translate(-50%,-50%); animation: lobby-person-arrive .62s cubic-bezier(.18,.82,.3,1) both; animation-delay: var(--person-delay); }
@@ -3056,9 +3057,9 @@ button {
 .artwork-gallery-stage > header > strong span { color: rgba(255,255,255,.28); font-size: .34em; }
 .artwork-gallery-grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,360px)); align-items: start; justify-content: center; gap: clamp(22px,3vw,46px); overflow: auto; padding: 4px 4px 28px; }
 .artwork-gallery-grid figure { min-width: 0; margin: 0; animation: gallery-work-arrive .6s cubic-bezier(.2,.8,.3,1) both; }
-.artwork-gallery-grid figure > div { height: clamp(220px,38vh,360px); position: relative; display: grid; place-items: center; padding: 18px; background: #111216; box-shadow: 0 24px 48px rgba(0,0,0,.38); }
-.artwork-gallery-grid img { width: 100%; height: 100%; object-fit: contain; }
-.artwork-gallery-grid figure > div span { position: absolute; right: 10px; bottom: 8px; color: rgba(255,255,255,.35); font-size: .56rem; }
+.artwork-gallery-grid figure > div { width: 100%; aspect-ratio: 1; position: relative; overflow: hidden; background: #111216; box-shadow: 0 24px 48px rgba(0,0,0,.38); }
+.artwork-gallery-grid img { width: calc(100% - 36px); height: calc(100% - 36px); position: absolute; inset: 18px; display: block; object-fit: contain; }
+.artwork-gallery-grid figure > div span { position: absolute; z-index: 1; right: 10px; bottom: 8px; color: rgba(255,255,255,.35); font-size: .56rem; }
 .artwork-gallery-grid figcaption { padding: 15px 2px 0; border-top: 1px solid rgba(255,255,255,.14); margin-top: 10px; }
 .artwork-gallery-grid figcaption h2 { overflow-wrap: anywhere; color: #fff; font-size: clamp(1rem,1.5vw,1.55rem); }
 .artwork-gallery-grid figcaption p { margin-top: 5px; color: rgba(255,255,255,.4); font-size: .62rem; }
@@ -3077,7 +3078,7 @@ button {
   .salon-lobby > header p { display: none; }
   .salon-lobby-room { border-radius: 20px; }
   .lobby-table { width: 68%; height: 40%; min-height: 190px; }
-  .lobby-table h1 { font-size: clamp(1.2rem,4vw,2.1rem); }
+  .lobby-table h1 { font-size: clamp(1.05rem,3vw,1.55rem); }
   .lobby-join { display: none; }
   .salon-avatar.compact { width: 54px; }
   .salon-avatar.compact b { max-width: 64px; font-size: .5rem; }
