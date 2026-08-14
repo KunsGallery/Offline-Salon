@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { realtime } from '../lib/realtime';
 import { useSession } from '../hooks/useSession';
-import { useResponses } from '../hooks/useResponses';
+import { useAllResponses, useResponses } from '../hooks/useResponses';
 import { useArtworkSecrets } from '../hooks/useArtworkSecrets';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { createId } from '../lib/ids';
@@ -17,8 +17,8 @@ export default function RemoteControl() {
   const { responses } = useResponses(sessionId, session?.stage?.questionId || session?.currentQuestionId || null);
   const reviewArtworkBase = (session?.artworks || []).find((item) => item.id === reviewArtworkId) || null;
   const reviewArtwork = reviewArtworkBase ? { ...reviewArtworkBase, ...(secrets[reviewArtworkBase.id] || {}) } : null;
-  const reviewQuestion = findArtworkActivityQuestion(session, reviewArtwork);
-  const { responses: reviewResponses, loading: reviewLoading, error: reviewError } = useResponses(sessionId, reviewQuestion?.id || null);
+  const reviewQuestions = (session?.questions || []).filter((question) => question.type === 'artwork-title' && question.artworkId === reviewArtwork?.id);
+  const { responses: allReviewResponses, loading: reviewLoading, error: reviewError } = useAllResponses(sessionId, Boolean(reviewArtwork));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
@@ -108,7 +108,8 @@ export default function RemoteControl() {
   const adoptedCount = (session.artworks || []).filter((item) => item.adoptedTitle).length;
   const artworkCount = (session.artworks || []).length;
   const galleryReady = artworkCount > 0;
-  const visibleReviewResponses = [...reviewResponses].filter((item) => !item.hidden).sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  const reviewQuestionIds = new Set(reviewQuestions.map((question) => question.id));
+  const archivedReviewResponses = allReviewResponses.filter((response) => reviewQuestionIds.has(response.questionId)).sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
   return <main className="remote-control remote-v2" style={sessionThemeStyle(session)}>
     <header><div><p className="eyebrow">OFFLINE SALON REMOTE</p><h1>{session.title}</h1></div><div className="remote-connection"><span className={online && !sessionError ? 'online' : 'offline'}>● {online && !sessionError ? '연결됨' : '연결 끊김'}</span><button className={awake ? 'active' : ''} onClick={toggleWakeLock}>{awake ? '화면 유지 중' : '화면 켜두기'}</button></div></header>
@@ -127,10 +128,10 @@ export default function RemoteControl() {
       {error || sessionError ? <p className="remote-error">{error || sessionError.message}</p> : busy ? <p className="remote-command-status">명령 적용 중…</p> : <p className="remote-command-status">마지막 동기화 {new Date(session.updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>}
     </section>
 
-    <section className="remote-assets"><div><p className="eyebrow">ARTWORKS</p><h2>작품 선택</h2></div>{reviewArtwork ? <section className="remote-title-archive" aria-label={`${reviewArtwork.adoptedTitle || reviewArtwork.title || '작품'} 제목 기록`}><header><div><span>제목 기록</span><h3>{reviewArtwork.adoptedTitle || reviewArtwork.title || '제목 미정'}</h3></div><button type="button" onClick={() => setReviewArtworkId(null)} aria-label="제목 기록 닫기">닫기</button></header>{reviewArtwork.adoptedTitle ? <p className="remote-title-adopted"><span>최종 채택</span><strong>{reviewArtwork.adoptedTitle}</strong></p> : null}<div className="remote-title-archive-summary"><strong>{visibleReviewResponses.length}</strong><span>개의 제목이 도착했습니다.</span></div>{reviewLoading ? <p className="remote-title-archive-state">기록을 불러오는 중…</p> : reviewError ? <p className="remote-title-archive-state error">기록을 불러오지 못했습니다. 잠시 후 다시 열어주세요.</p> : !reviewQuestion ? <p className="remote-title-archive-state">이 작품에 연결된 제목 활동 기록이 없습니다.</p> : visibleReviewResponses.length ? <ol>{visibleReviewResponses.map((response) => {
+    <section className="remote-assets"><div><p className="eyebrow">ARTWORKS</p><h2>작품 선택</h2></div>{reviewArtwork ? <section className="remote-title-archive" aria-label={`${reviewArtwork.adoptedTitle || reviewArtwork.title || '작품'} 제목 기록`}><header><div><span>제목 기록</span><h3>{reviewArtwork.adoptedTitle || reviewArtwork.title || '제목 미정'}</h3></div><button type="button" onClick={() => setReviewArtworkId(null)} aria-label="제목 기록 닫기">닫기</button></header>{reviewArtwork.adoptedTitle ? <p className="remote-title-adopted"><span>최종 채택</span><strong>{reviewArtwork.adoptedTitle}</strong></p> : null}<div className="remote-title-archive-summary"><strong>{archivedReviewResponses.length}</strong><span>개의 제출 제목 전체 기록입니다.</span></div>{reviewLoading ? <p className="remote-title-archive-state">기록을 불러오는 중…</p> : reviewError ? <p className="remote-title-archive-state error">기록을 불러오지 못했습니다. 잠시 후 다시 열어주세요.</p> : !reviewQuestions.length ? <p className="remote-title-archive-state">이 작품에 연결된 제목 활동 기록이 없습니다.</p> : archivedReviewResponses.length ? <ol>{archivedReviewResponses.map((response) => {
       const responseTitle = Array.isArray(response.value) ? response.value.join(' ') : response.value;
       const isAdopted = reviewArtwork.adoptedResponseId === response.id;
-      return <li className={isAdopted ? 'adopted' : ''} key={response.id}><div className="remote-title-response-copy"><strong>{responseTitle}</strong><span>{response.nickname || '익명 참여자'}</span></div><div className="remote-title-response-actions"><b>{isAdopted ? '채택 · ' : ''}♥ {response.likes || 0}</b><button type="button" disabled={busy} onClick={() => deleteTitleResponse(response, reviewArtwork)} aria-label={`“${responseTitle}” 제목 삭제`}>삭제</button></div></li>;
+      return <li className={isAdopted ? 'adopted' : ''} key={response.id}><div className="remote-title-response-copy"><strong>{responseTitle}</strong><span>{response.nickname || '익명 참여자'}{response.hidden ? ' · 숨김 처리됨' : ''}</span></div><div className="remote-title-response-actions"><b>{isAdopted ? '채택 · ' : ''}♥ {response.likes || 0}</b><button type="button" disabled={busy} onClick={() => deleteTitleResponse(response, reviewArtwork)} aria-label={`“${responseTitle}” 제목 삭제`}>삭제</button></div></li>;
     })}</ol> : <p className="remote-title-archive-state">제출된 제목이 없습니다.</p>}</section> : null}<div className="remote-asset-grid">{artworks.map((item) => { const hasHistory = Boolean(findArtworkActivityQuestion(session, item) || item.adoptedTitle); return <article className="remote-asset-card" key={item.id}><button className="remote-asset-present" disabled={busy} onClick={() => run(() => startArtwork(item))}><img src={item.imageUrl} alt={item.title || '작품'} /><span>{item.adoptedTitle || item.title || '제목 미정'}{item.adoptedTitle ? ' · 채택 완료' : ''}</span></button>{hasHistory ? <button className="remote-asset-history" type="button" aria-expanded={reviewArtworkId === item.id} onClick={() => setReviewArtworkId((current) => current === item.id ? null : item.id)}>제목 기록</button> : null}</article>; })}</div></section>
     <section className="remote-assets"><div><p className="eyebrow">PRESENTATIONS</p><h2>PDF 선택</h2></div><div className="remote-asset-grid">{(session.decks || []).map((item) => <button disabled={busy} key={item.id} onClick={() => run(() => realtime.updateSession(session.id, { stage: { mode: 'pdf', deckId: item.id, page: 1, fitMode: 'fit', zoom: 1, blackout: false }, status: 'live' }))}><img src={item.thumbnailUrl} alt={`${item.title} 표지`} /><span>{item.title}</span></button>)}</div></section>
     <footer><button onClick={() => window.open(`${window.location.origin}/host/${session.id}`, '_blank', 'noopener,noreferrer')}>화면 보기</button><button className="remote-home" disabled={busy} onClick={() => run(showLobby)}>대기방</button>{deck ? <button className="remote-next" disabled={busy || page >= deck.pageCount} onClick={() => run(() => setPage(page + 1))}>다음 장 →</button> : <button className="remote-next" disabled={busy || !galleryReady} title={galleryReady ? '' : '등록된 작품이 없습니다.'} onClick={() => run(showGallery)}>갤러리 {adoptedCount}/{artworkCount}</button>}</footer>

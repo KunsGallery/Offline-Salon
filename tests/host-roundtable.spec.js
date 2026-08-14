@@ -201,10 +201,13 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
     work_2: { id: 'work_2', title: '두 번째 원제', artist: '작가' },
     work_3: { id: 'work_3', title: '세 번째 원제', artist: '작가' },
   };
-  session.questions = [{ id: 'art_title_question', title: '이 작품에 제목을 붙인다면?', type: 'artwork-title', internal: true, isActive: true, artworkId: 'work_1', order: 0 }];
+  session.questions = [
+    { id: 'old_art_title_question', title: '이 작품에 제목을 붙인다면?', type: 'artwork-title', internal: true, isActive: false, artworkId: 'work_1', order: 0 },
+    { id: 'art_title_question', title: '이 작품에 제목을 붙인다면?', type: 'artwork-title', internal: true, isActive: true, artworkId: 'work_1', order: 1 },
+  ];
   session.responses = [
     { id: 'caption_1', questionId: 'art_title_question', participantId: 'guest_1', nickname: '하린', value: '달이 머문 자리', likes: 4, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:00:00.000Z', updatedAt: '2026-08-03T09:00:00.000Z' },
-    { id: 'caption_2', questionId: 'art_title_question', participantId: 'guest_2', nickname: '지우', value: '푸른 침묵', likes: 2, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:01:00.000Z', updatedAt: '2026-08-03T09:01:00.000Z' },
+    { id: 'caption_2', questionId: 'old_art_title_question', participantId: 'guest_2', nickname: '지우', value: '푸른 침묵', likes: 2, likedBy: {}, hidden: true, createdAt: '2026-08-03T09:01:00.000Z', updatedAt: '2026-08-03T09:01:00.000Z' },
   ];
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -249,6 +252,7 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await expect(titleArchive.locator('li')).toHaveCount(2);
   await expect(titleArchive.locator('li.adopted')).toContainText('달이 머문 자리');
   await expect(titleArchive.locator('li.adopted')).toContainText('♥ 4');
+  await expect(titleArchive.getByText('지우 · 숨김 처리됨')).toBeVisible();
   await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.stage.mode, STORAGE_KEY)).toBe('gallery');
   page.once('dialog', (dialog) => dialog.accept());
   await titleArchive.getByRole('button', { name: '“푸른 침묵” 제목 삭제' }).click();
@@ -262,12 +266,12 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await expect.poll(() => page.evaluate((key) => {
     const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
     return { artworkId: current.stage.artworkId, phase: current.stage.phase, questionCount: current.questions.length };
-  }, STORAGE_KEY)).toEqual({ artworkId: 'work_2', phase: 'reveal', questionCount: 1 });
+  }, STORAGE_KEY)).toEqual({ artworkId: 'work_2', phase: 'reveal', questionCount: 2 });
   await page.locator('.remote-asset-grid button').filter({ hasText: '달이 머문 자리 · 채택 완료' }).click();
   await expect.poll(() => page.evaluate((key) => {
     const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
     return { artworkId: current.stage.artworkId, phase: current.stage.phase, questionId: current.stage.questionId, questionCount: current.questions.length, adoptedTitle: current.artworks[0].adoptedTitle };
-  }, STORAGE_KEY)).toEqual({ artworkId: 'work_1', phase: 'reveal', questionId: 'art_title_question', questionCount: 1, adoptedTitle: '달이 머문 자리' });
+  }, STORAGE_KEY)).toEqual({ artworkId: 'work_1', phase: 'reveal', questionId: 'art_title_question', questionCount: 2, adoptedTitle: '달이 머문 자리' });
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '“달이 머문 자리” 제목 삭제' }).first().click();
   await expect.poll(() => page.evaluate((key) => {
