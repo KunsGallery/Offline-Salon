@@ -583,6 +583,25 @@ const localAdapter = {
     broadcast(sessionId);
   },
 
+  deleteArtworkTitleResponse(sessionId, responseId, artworkId, options = {}) {
+    const session = ensureSession(sessionId);
+    if (options.clearAdoption) {
+      session.artworks = (session.artworks || []).map((item) => item.id === artworkId ? {
+        ...item,
+        adoptedTitle: null,
+        adoptedResponseId: null,
+        adoptedQuestionId: null,
+        adoptedLikes: 0,
+        adoptedAt: null,
+      } : item);
+    }
+    session.responses = session.responses.filter((response) => response.id !== responseId);
+    if (options.sessionPatch) Object.assign(session, options.sessionPatch);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
   subscribeResponses(sessionId, callback) {
     const set = bucket(listeners.responses, sessionId);
     set.add(callback);

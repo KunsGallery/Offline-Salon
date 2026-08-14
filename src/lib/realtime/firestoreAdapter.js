@@ -712,6 +712,29 @@ const firestoreAdapter = {
     await deleteDoc(doc(responsesCol(sessionId), responseId));
   },
 
+  async deleteArtworkTitleResponse(sessionId, responseId, artworkId, options = {}) {
+    requireAdminWrite();
+    const batch = writeBatch(ensureDb());
+    if (options.clearAdoption) {
+      batch.set(doc(artworksCol(sessionId), artworkId), {
+        adoptedTitle: null,
+        adoptedResponseId: null,
+        adoptedQuestionId: null,
+        adoptedLikes: 0,
+        adoptedAt: null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+    batch.delete(doc(responsesCol(sessionId), responseId));
+    if (options.sessionPatch) {
+      batch.update(sessionDocRef(sessionId), {
+        ...options.sessionPatch,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  },
+
   subscribeResponses(sessionId, callback, onError) {
     return onSnapshot(
       responsesCol(sessionId),

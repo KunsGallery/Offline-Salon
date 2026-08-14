@@ -209,7 +209,7 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/remote/session_roundtable');
-  const captionButton = page.locator('.remote-caption-picker button').filter({ hasText: '달이 머문 자리' });
+  const captionButton = page.locator('.remote-caption-choice').filter({ hasText: '달이 머문 자리' });
   await captionButton.click();
   await expect(captionButton).toContainText('채택됨');
   await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.artworks[0].adoptedTitle, STORAGE_KEY)).toBe('달이 머문 자리');
@@ -242,6 +242,22 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await expect.poll(() => hostPage.locator('.artwork-gallery-grid').evaluate((node) => Math.round(node.scrollTop))).toBe(0);
   await hostPage.close();
 
+  const adoptedArtworkCard = page.locator('.remote-asset-card').filter({ hasText: '달이 머문 자리 · 채택 완료' });
+  await adoptedArtworkCard.getByRole('button', { name: '제목 기록' }).click();
+  const titleArchive = page.getByRole('region', { name: '달이 머문 자리 제목 기록' });
+  await expect(titleArchive).toBeVisible();
+  await expect(titleArchive.locator('li')).toHaveCount(2);
+  await expect(titleArchive.locator('li.adopted')).toContainText('달이 머문 자리');
+  await expect(titleArchive.locator('li.adopted')).toContainText('♥ 4');
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.stage.mode, STORAGE_KEY)).toBe('gallery');
+  page.once('dialog', (dialog) => dialog.accept());
+  await titleArchive.getByRole('button', { name: '“푸른 침묵” 제목 삭제' }).click();
+  await expect(titleArchive.locator('li')).toHaveCount(1);
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.responses.map((item) => item.id), STORAGE_KEY)).toEqual(['caption_1']);
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.stage.mode, STORAGE_KEY)).toBe('gallery');
+  await titleArchive.getByRole('button', { name: '제목 기록 닫기' }).click();
+  await expect(titleArchive).toHaveCount(0);
+
   await page.locator('.remote-asset-grid button').filter({ hasText: '먼저 채택된 제목 · 채택 완료' }).click();
   await expect.poll(() => page.evaluate((key) => {
     const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
@@ -252,4 +268,10 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
     const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
     return { artworkId: current.stage.artworkId, phase: current.stage.phase, questionId: current.stage.questionId, questionCount: current.questions.length, adoptedTitle: current.artworks[0].adoptedTitle };
   }, STORAGE_KEY)).toEqual({ artworkId: 'work_1', phase: 'reveal', questionId: 'art_title_question', questionCount: 1, adoptedTitle: '달이 머문 자리' });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '“달이 머문 자리” 제목 삭제' }).first().click();
+  await expect.poll(() => page.evaluate((key) => {
+    const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
+    return { phase: current.stage.phase, responseCount: current.responses.length, adoptedTitle: current.artworks[0].adoptedTitle, adoptedResponseId: current.artworks[0].adoptedResponseId };
+  }, STORAGE_KEY)).toEqual({ phase: 'vote', responseCount: 0, adoptedTitle: null, adoptedResponseId: null });
 });
