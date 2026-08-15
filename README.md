@@ -1,5 +1,9 @@
 # Offline Salon Interactive Studio Pro
 
+공통 운영 기능, 범용 좋아요, 참여자별 결과 갤러리와 다음 활동 확장 규칙은 [Offline Salon Core](docs/OFFLINE_SALON_CORE.md)에 정리되어 있습니다.
+
+9월 NFC 전시 포도 활동의 운영 방식과 카드 URL 규칙은 [9월 전시 포도](docs/SEPTEMBER_EXHIBITION_GRAPE.md)에 정리되어 있습니다.
+
 `local` 모드는 Firebase 설정 없이 동작합니다.
 `firestore` 모드는 여러 기기 실시간 운영용입니다.
 

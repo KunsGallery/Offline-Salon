@@ -48,7 +48,8 @@ export default function LiveRoomView({ question, responses = [], participants = 
   );
   const featuredResponses = useMemo(() => stableResponses.slice(-MAX_VISIBLE_SEATS), [stableResponses]);
   const slots = SLOT_SETS[featuredResponses.length] || DEFAULT_SLOTS;
-  const totalLikes = stableResponses.reduce((sum, response) => sum + Number(response.likes || 0), 0);
+  const likesEnabled = question?.likesEnabled === true;
+  const totalLikes = likesEnabled ? stableResponses.reduce((sum, response) => sum + Number(response.likes || 0), 0) : 0;
   const hiddenCount = Math.max(0, stableResponses.length - featuredResponses.length);
   const activeLikeIds = useMemo(() => new Set(likeEffects.map((effect) => effect.responseId)), [likeEffects]);
   const burstById = useMemo(() => likeEffects.reduce((result, effect) => {
@@ -68,7 +69,7 @@ export default function LiveRoomView({ question, responses = [], participants = 
         <div className="salon-roundtable-metrics" aria-label="실시간 참여 현황">
           <span><b>{participants.length}</b> people</span>
           <span><b>{stableResponses.length}</b> answers</span>
-          <span><b>{totalLikes}</b> hearts</span>
+          {likesEnabled ? <span><b>{totalLikes}</b> hearts</span> : null}
         </div>
       </header>
 
@@ -90,8 +91,8 @@ export default function LiveRoomView({ question, responses = [], participants = 
             const slot = slots[index] || DEFAULT_SLOTS[index];
             const participant = getParticipant(response, participants);
             const nickname = participant?.nickname || response.nickname || '익명';
-            const likes = Number(response.likes || 0);
-            const highlighted = activeLikeIds.has(response.id);
+            const likes = likesEnabled ? Number(response.likes || 0) : 0;
+            const highlighted = likesEnabled && activeLikeIds.has(response.id);
             return (
               <article
                 className={`salon-seat ${highlighted ? 'is-liked-now' : ''} ${likes >= 3 ? 'is-popular' : ''}`}
@@ -103,11 +104,11 @@ export default function LiveRoomView({ question, responses = [], participants = 
                   '--seat-delay': `${Math.min(index * 55, 360)}ms`,
                 }}
               >
-                {burstById[response.id] ? <LikeBurst count={burstById[response.id]} /> : null}
+                {likesEnabled && burstById[response.id] ? <LikeBurst count={burstById[response.id]} /> : null}
                 <header>
                   <span className="salon-seat-avatar">{getInitial(nickname)}</span>
                   <div><strong>{nickname}</strong><small>{formatCompactTime(response.createdAt)}</small></div>
-                  <b className="salon-seat-likes">♥ {likes}</b>
+                  {likesEnabled ? <b className="salon-seat-likes">♥ {likes}</b> : null}
                 </header>
                 <p>{safeJoin(response.value)}</p>
                 <footer><span>SEAT {String(index + 1).padStart(2, '0')}</span><i /></footer>

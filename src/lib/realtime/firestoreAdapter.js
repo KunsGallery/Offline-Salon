@@ -67,6 +67,7 @@ function fromSessionDoc(id, data) {
       id,
       title: data.title,
       description: data.description,
+      platform: data.platform || 'offline-salon-core',
       status: data.status,
       currentQuestionId: data.currentQuestionId ?? null,
       showResults: data.showResults,
@@ -99,6 +100,8 @@ function fromQuestionDoc(id, data) {
     artworkId: data.artworkId || null,
     runId: data.runId || null,
     internal: data.internal === true,
+    likesEnabled: data.likesEnabled === true,
+    includeInGallery: data.includeInGallery === true,
   });
 }
 
@@ -281,6 +284,7 @@ const firestoreAdapter = {
     await setDoc(sessionDocRef(sessionId), {
       title: input.title || '새 세션',
       description: input.description || '실시간 인터랙티브 세션',
+      platform: 'offline-salon-core',
       status: input.status || 'draft',
       currentQuestionId: null,
       showResults: false,
@@ -480,7 +484,8 @@ const firestoreAdapter = {
     const batch = writeBatch(ensureDb());
     legacyArtworks.forEach((item, index) => {
       const id = item.id || createId('artwork');
-      batch.set(doc(artworksCol(sessionId), id), cleanRecord({ imageUrl: item.imageUrl, storagePath: item.storagePath || null, order: item.order ?? index, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true });
+      const publicArtwork = { ...item, id: undefined, title: undefined, artist: undefined, description: undefined };
+      batch.set(doc(artworksCol(sessionId), id), cleanRecord({ ...publicArtwork, order: item.order ?? index, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true });
       batch.set(doc(artworkSecretsCol(sessionId), id), { title: item.title || '', artist: item.artist || '', description: item.description || '', updatedAt: serverTimestamp() }, { merge: true });
     });
     legacyDecks.forEach((item, index) => {
@@ -516,6 +521,8 @@ const firestoreAdapter = {
       artworkId: input.artworkId || null,
       runId: input.runId || null,
       internal: input.internal === true,
+      likesEnabled: input.likesEnabled === true,
+      includeInGallery: input.includeInGallery === true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -676,6 +683,11 @@ const firestoreAdapter = {
         throw new Error(`Response not found: ${responseId}`);
       }
       const data = snap.data();
+      const questionSnap = await transaction.get(doc(questionsCol(sessionId), data.questionId));
+      const questionData = questionSnap.data();
+      if (questionData?.likesEnabled !== true && questionData?.type !== 'artwork-title') {
+        throw new Error('이 활동은 좋아요 투표를 사용하지 않습니다.');
+      }
       if (data.participantId === participantId) {
         return normalizeResponse({
           id: snap.id,
@@ -790,6 +802,7 @@ const firestoreAdapter = {
     };
     if (Object.prototype.hasOwnProperty.call(data, 'nickname')) participantPatch.nickname = data.nickname;
     if (Object.prototype.hasOwnProperty.call(data, 'avatar')) participantPatch.avatar = data.avatar;
+    if (Object.prototype.hasOwnProperty.call(data, 'grapeSelections')) participantPatch.grapeSelections = data.grapeSelections;
     if (data.joinedAt) participantPatch.joinedAt = data.joinedAt;
     else if (!participantCache.get(sessionId)?.some((item) => item.participantId === participantId)) participantPatch.joinedAt = serverTimestamp();
     await setDoc(

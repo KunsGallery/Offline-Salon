@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pdfDocumentOptions, pdfjs } from '../../lib/pdf';
 import { clampPdfZoom, PDF_ZOOM_PRESETS } from '../../lib/pdfView';
 import { safeJoin } from '../../lib/format';
+import { buildResultGallery } from '../../lib/resultGallery';
+import SalonAvatar from '../participants/SalonAvatar';
 
 export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, compact = false }) {
   const hostRef = useRef(null);
@@ -101,6 +103,15 @@ export function PdfParticipantView({ deck, page }) {
   </main>;
 }
 
+export function ImageHostView({ session, image }) {
+  if (!image) return <main className="salon-image-stage missing"><h1>이미지를 준비하고 있습니다.</h1></main>;
+  return <main className="salon-image-stage"><header><p className="eyebrow">OFFLINE SALON · IMAGE</p><span>{session.title}</span></header><figure><img src={image.imageUrl} alt={image.displayTitle || '세션 이미지'} />{image.displayTitle ? <figcaption>{image.displayTitle}</figcaption> : null}</figure></main>;
+}
+
+export function ImageParticipantView({ image }) {
+  return <main className="media-participant image-companion"><p className="eyebrow">NOW ON SCREEN</p><h1>{image?.displayTitle || '이미지를 함께 보고 있어요.'}</h1><p>휴대폰은 잠시 내려두고 앞 화면의 이미지에 집중해 주세요.</p>{image?.imageUrl ? <img src={image.imageUrl} alt={image.displayTitle || '현재 이미지'} /> : null}</main>;
+}
+
 export function ArtworkHostView({ session, artwork, responses }) {
   const phase = session.stage?.phase || 'collect';
   const sorted = useMemo(() => [...responses].sort((a, b) => (b.likes || 0) - (a.likes || 0)), [responses]);
@@ -110,8 +121,8 @@ export function ArtworkHostView({ session, artwork, responses }) {
   return <main className={`artwork-host-stage trophies ${phase === 'reveal' ? 'revealed' : ''}`}><header><p className="eyebrow">{phase === 'reveal' ? 'SELECTED TITLE' : 'TITLE VOTE'}</p><span>{responses.length} TITLES</span></header><div className="artwork-mini"><img src={artwork.imageUrl} alt="작품" />{phase === 'reveal' ? <div><strong>{artwork.adoptedTitle || reveal.title || '채택 제목을 기다리고 있습니다.'}</strong><span>{artwork.adoptedTitle ? '참여자들이 함께 만든 작품명' : reveal.artist || '작가 미정'}</span></div> : null}</div><section className="title-trophy-board">{sorted.map((response, index) => { const likes = Number(response.likes || 0); const adopted = artwork.adoptedResponseId === response.id; return <article key={response.id} style={{ '--title-scale': Math.min(1.32, 1 + likes * 0.055), '--gold': adopted ? 1 : Math.min(1, likes / 6) }} className={`${index === 0 && likes ? 'winner' : ''} ${adopted ? 'adopted' : ''}`}><span>{adopted ? '✓' : index === 0 && likes ? '★' : '◇'}</span><h2>{safeJoin(response.value)}</h2><b>{adopted ? '채택' : `♥ ${likes}`}</b></article>; })}</section></main>;
 }
 
-export function ArtworkGalleryHostView({ session }) {
-  const artworks = session.artworks || [];
+export function ResultGalleryHostView({ session, questions = [], responses = [], participants = [] }) {
+  const { galleryQuestions, participantResults, mediaItems, resultCount } = buildResultGallery(session, questions, responses, participants);
   const galleryRef = useRef(null);
   const scrollPosition = Math.max(1, Number(session.stage?.page || 1));
   useEffect(() => {
@@ -119,14 +130,22 @@ export function ArtworkGalleryHostView({ session }) {
     if (!gallery) return;
     const top = Math.min(gallery.scrollHeight - gallery.clientHeight, (scrollPosition - 1) * gallery.clientHeight * 0.72);
     gallery.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-  }, [scrollPosition, artworks.length]);
-  return <main className="artwork-gallery-stage"><header><h1>서로의 시선이 머문 자리</h1></header>{artworks.length ? <section className="artwork-gallery-grid" ref={galleryRef}>{artworks.map((artwork, index) => <figure className={artwork.adoptedTitle ? '' : 'pending'} key={artwork.id}><div><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><span>{String(index + 1).padStart(2, '0')}</span></div><figcaption><h2>{artwork.adoptedTitle || '제목 채택 대기'}</h2><p>{artwork.adoptedTitle ? '참여자들이 함께 지은 제목' : '이 작품의 최종 제목을 선택해 주세요.'}</p></figcaption></figure>)}</section> : <section className="artwork-gallery-empty"><h2>등록된 작품이 없습니다.</h2><p>작품을 등록하고 제목 활동을 시작해 주세요.</p></section>}</main>;
+  }, [scrollPosition, participantResults.length, mediaItems.length]);
+  const isLegacyArtworkGallery = galleryQuestions.length === 0 && mediaItems.some((item) => item.adoptedTitle);
+  if (isLegacyArtworkGallery) return <main className="artwork-gallery-stage"><header><h1>서로의 시선이 머문 자리</h1></header><section className="artwork-gallery-grid" ref={galleryRef}>{mediaItems.map((artwork, index) => <figure className={artwork.adoptedTitle ? '' : 'pending'} key={artwork.id}><div><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><span>{String(index + 1).padStart(2, '0')}</span></div><figcaption><h2>{artwork.adoptedTitle || '제목 채택 대기'}</h2><p>{artwork.adoptedTitle ? '참여자들이 함께 지은 제목' : '이 작품의 최종 제목을 선택해 주세요.'}</p></figcaption></figure>)}</section></main>;
+  const hasResults = participantResults.length || mediaItems.length;
+  return <main className="result-gallery-stage"><header><div><p className="eyebrow">OFFLINE SALON · COLLECTIVE ARCHIVE</p><h1>우리가 함께 만든 결과</h1></div><span>{participantResults.length} PEOPLE · {resultCount} RESULTS</span></header>{hasResults ? <section className="result-gallery-scroll" ref={galleryRef}>{participantResults.length ? <section className="participant-result-grid" aria-label="참여자별 결과">{participantResults.map((group, index) => <article className="participant-result-card" key={group.participantId || `${group.nickname}:${index}`}><header><SalonAvatar avatar={group.avatar} compact /><div><span>{String(index + 1).padStart(2, '0')}</span><h2>{group.nickname}</h2></div>{group.likesEnabled ? <b>♥ {group.likes}</b> : null}</header><div>{group.results.map((result) => <article className="participant-result-entry" key={result.id}><span>{result.questionTitle}</span><p>{result.displayValue}</p>{result.likesEnabled ? <b>♥ {result.likes || 0}</b> : null}</article>)}</div></article>)}</section> : null}{mediaItems.length ? <section className="result-media-section"><header><span>SESSION MATERIALS</span><h2>함께 본 이미지</h2></header><div className="result-media-grid">{mediaItems.map((item, index) => <figure key={item.id}><div><img src={item.imageUrl} alt={item.displayTitle} /><span>{String(index + 1).padStart(2, '0')}</span></div><figcaption>{item.displayTitle}</figcaption></figure>)}</div></section> : null}</section> : <section className="result-gallery-empty"><h2>아직 모인 결과가 없습니다.</h2><p>질문에서 ‘결과 갤러리에 포함’을 켜고 참여 결과를 받아보세요.</p></section>}</main>;
 }
 
-export function ArtworkGalleryParticipantView({ session }) {
-  const artworks = session.artworks || [];
-  return <main className="media-participant mobile-gallery"><h1>우리의 작은 전시가 완성됐어요.</h1><p>앞 화면에서 작품과 새로 지어진 제목을 함께 감상해 주세요.</p><div>{artworks.map((artwork, index) => <figure key={artwork.id}><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><figcaption>{artwork.adoptedTitle || '제목 채택 대기'}</figcaption></figure>)}</div></main>;
+export function ResultGalleryParticipantView({ session, questions = [], responses = [], participants = [], participantId = '', onLike = null, likingResponseId = null }) {
+  const { galleryQuestions, participantResults, mediaItems, resultCount } = buildResultGallery(session, questions, responses, participants);
+  const isLegacyArtworkGallery = galleryQuestions.length === 0 && mediaItems.some((item) => item.adoptedTitle);
+  if (isLegacyArtworkGallery) return <main className="media-participant mobile-gallery"><h1>우리의 작은 전시가 완성됐어요.</h1><p>앞 화면에서 작품과 새로 지어진 제목을 함께 감상해 주세요.</p><div>{mediaItems.map((artwork, index) => <figure key={artwork.id}><img src={artwork.imageUrl} alt={artwork.adoptedTitle || `작품 ${index + 1}`} /><figcaption>{artwork.adoptedTitle || '제목 채택 대기'}</figcaption></figure>)}</div></main>;
+  return <main className="media-participant mobile-result-gallery"><header><p className="eyebrow">OUR RESULTS</p><h1>오늘 우리가<br />함께 만든 것들</h1><p>{participantResults.length}명의 결과 {resultCount}개를 한곳에 모았습니다.</p></header><div className="mobile-result-groups">{participantResults.map((group) => <section className={group.participantId === participantId ? 'mine' : ''} key={group.participantId || group.nickname}><header><SalonAvatar avatar={group.avatar} compact /><div><h2>{group.nickname}</h2><span>{group.results.length}개의 결과</span></div></header>{group.results.map((result) => { const liked = Boolean(result.likedBy?.[participantId]); const canLike = result.likesEnabled && result.participantId !== participantId && onLike; return <article key={result.id}><span>{result.questionTitle}</span><p>{result.displayValue}</p>{result.likesEnabled ? <button type="button" className={liked ? 'liked' : ''} disabled={!canLike || likingResponseId === result.id} onClick={() => canLike && onLike(result)}>{result.participantId === participantId ? '내 결과' : `${liked ? '♥' : '♡'} ${result.likes || 0}`}</button> : null}</article>; })}</section>)}</div>{mediaItems.length ? <section className="mobile-result-media"><h2>함께 본 이미지</h2><div>{mediaItems.map((item) => <figure key={item.id}><img src={item.imageUrl} alt={item.displayTitle} /><figcaption>{item.displayTitle}</figcaption></figure>)}</div></section> : null}</main>;
 }
+
+export const ArtworkGalleryHostView = ResultGalleryHostView;
+export const ArtworkGalleryParticipantView = ResultGalleryParticipantView;
 
 export function ArtworkParticipantView({ artwork, phase, responses, myResponse, onSubmit, onLike, participantId }) {
   const [text, setText] = useState('');

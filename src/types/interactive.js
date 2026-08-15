@@ -15,6 +15,8 @@
  * @property {string[]} options
  * @property {number} order
  * @property {boolean} isActive
+ * @property {boolean} likesEnabled
+ * @property {boolean} includeInGallery
  * @property {string} createdAt
  * @property {string} updatedAt
  *
@@ -30,6 +32,7 @@
  * @typedef {Object} InteractiveParticipant
  * @property {string} participantId
  * @property {string|null} nickname
+ * @property {Record<string, {exhibitionId: string, status: 'want'|'expecting'|'seen', rating: number, tapCount: number, createdAt: string, updatedAt: string}>} grapeSelections
  * @property {string} joinedAt
  * @property {string} lastSeenAt
  *
@@ -37,6 +40,7 @@
  * @property {string} id
  * @property {string} title
  * @property {string} description
+ * @property {'offline-salon-core'} platform
  * @property {SessionStatus} status
  * @property {string|null} currentQuestionId
  * @property {boolean} showResults

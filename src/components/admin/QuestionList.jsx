@@ -32,6 +32,8 @@ export default function QuestionList({ session, questions, activeQuestionId, onS
                   <div className="row wrap gap-sm align-center">
                     <h3>{question.title}</h3>
                     <span className="badge">{question.type}</span>
+                    {question.likesEnabled ? <span className="badge">♡ 좋아요</span> : null}
+                    {question.includeInGallery ? <span className="badge">▦ 결과 갤러리</span> : null}
                   </div>
                   <p className="muted tiny">{question.description || '설명 없음'}</p>
                 </div>

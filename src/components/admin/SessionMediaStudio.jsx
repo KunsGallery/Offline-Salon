@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { buildBranding, extractPalette, sessionThemeStyle } from '../../lib/colorPalette';
 import { createId } from '../../lib/ids';
-import { artworkReveal, findArtworkActivityQuestion } from '../../lib/artworkActivity';
 import { getMediaStorageStatus, removeMedia, uploadMedia } from '../../lib/media';
 import { inspectPdf } from '../../lib/pdf';
 import { questionModePatch } from '../../lib/stage';
@@ -117,8 +116,10 @@ function ArtworkStudio({ session, activeQuestion }) {
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [nfcCopiedId, setNfcCopiedId] = useState('');
   const artworks = useMemo(() => (session.artworks || []).map((item) => ({ ...item, ...(secrets[item.id] || {}) })), [secrets, session.artworks]);
-  const activeId = session.stage?.mode === 'artwork' ? session.stage.artworkId : null;
+  const activeId = session.stage?.mode === 'image' || session.stage?.mode === 'artwork' ? session.stage.artworkId : null;
+  const legacyArtworkActive = session.stage?.mode === 'artwork';
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const choose = (event) => {
@@ -130,7 +131,7 @@ function ArtworkStudio({ session, activeQuestion }) {
     setFile(null); setPreview(''); setForm(emptyArtworkForm); setEditingId(null); formElement?.reset();
   };
   const edit = (artwork) => {
-    setEditingId(artwork.id); setForm({ title: artwork.title || '', artist: artwork.artist || '', description: artwork.description || '' }); setPreview(artwork.imageUrl); setFile(null);
+    setEditingId(artwork.id); setForm({ title: artwork.displayTitle || artwork.title || '', artist: artwork.artist || '', description: artwork.description || '' }); setPreview(artwork.imageUrl); setFile(null);
   };
   const save = async (event) => {
     event.preventDefault();
@@ -147,10 +148,10 @@ function ArtworkStudio({ session, activeQuestion }) {
       }
       if (editingId) {
         const previous = artworks.find((item) => item.id === editingId);
-        await realtime.updateArtwork(session.id, editingId, uploaded ? { imageUrl: uploaded.url, storagePath: uploaded.path } : {}, form);
+        await realtime.updateArtwork(session.id, editingId, { ...(uploaded ? { imageUrl: uploaded.url, storagePath: uploaded.path } : {}), displayTitle: form.title }, form);
         if (uploaded && previous?.storagePath && previous.storagePath !== uploaded.path) await removeMedia(previous.storagePath).catch(() => undefined);
       } else {
-        await realtime.createArtwork(session.id, { id, imageUrl: uploaded.url, storagePath: uploaded.path, order: artworks.length }, form);
+        await realtime.createArtwork(session.id, { id, imageUrl: uploaded.url, storagePath: uploaded.path, displayTitle: form.title, order: artworks.length }, form);
       }
       resetForm(formElement);
     } catch (reason) {
@@ -161,21 +162,7 @@ function ArtworkStudio({ session, activeQuestion }) {
   const start = async (artwork) => {
     setBusy(true); setError('');
     try {
-      const existingQuestion = findArtworkActivityQuestion(session, artwork);
-      if (existingQuestion || artwork.adoptedTitle) {
-        if (existingQuestion) await Promise.resolve(realtime.activateQuestion(session.id, existingQuestion.id));
-        await Promise.resolve(realtime.updateSession(session.id, {
-          currentQuestionId: existingQuestion?.id || null,
-          stage: { mode: 'artwork', artworkId: artwork.id, phase: artwork.adoptedTitle ? 'reveal' : 'collect', runId: existingQuestion?.runId || null, questionId: existingQuestion?.id || null, page: 1, reveal: artwork.adoptedTitle ? artworkReveal(artwork, secrets[artwork.id]) : null, blackout: false },
-          showResults: Boolean(artwork.adoptedTitle),
-          status: 'live',
-        }));
-        return;
-      }
-      const runId = createId('run');
-      const question = await Promise.resolve(realtime.createQuestion(session.id, { title: '이 작품에 제목을 붙인다면?', description: '정답은 잠시 잊고 떠오르는 제목을 적어보세요.', type: 'artwork-title', artworkId: artwork.id, runId, internal: true }));
-      await Promise.resolve(realtime.activateQuestion(session.id, question.id));
-      await Promise.resolve(realtime.updateSession(session.id, { stage: { mode: 'artwork', artworkId: artwork.id, phase: 'collect', runId, questionId: question.id, page: 1, reveal: null }, showResults: false, status: 'live' }));
+      await Promise.resolve(realtime.updateSession(session.id, { currentQuestionId: null, stage: { mode: 'image', artworkId: artwork.id, page: 1, blackout: false }, showResults: false, status: 'live' }));
     } catch (reason) { setError(messageOf(reason)); } finally { setBusy(false); }
   };
   const setPhase = (phase) => {
@@ -183,7 +170,7 @@ function ArtworkStudio({ session, activeQuestion }) {
     return realtime.updateSession(session.id, { stage: { ...session.stage, phase, reveal: phase === 'reveal' ? { title: secret.title || '', artist: secret.artist || '', description: secret.description || '' } : null }, showResults: phase !== 'collect' });
   };
   const remove = async (artwork) => {
-    if (!window.confirm(`“${artwork.title || '이 작품'}”을 삭제할까요?`)) return;
+    if (!window.confirm(`“${artwork.displayTitle || artwork.title || '이 이미지'}”을 삭제할까요?`)) return;
     if (activeId === artwork.id) await realtime.updateSession(session.id, questionModePatch(session, activeQuestion));
     await realtime.deleteArtwork(session.id, artwork.id);
     const shared = artworks.some((item) => item.id !== artwork.id && item.storagePath === artwork.storagePath);
@@ -191,9 +178,16 @@ function ArtworkStudio({ session, activeQuestion }) {
   };
   const duplicate = async (artwork) => {
     const id = createId('artwork');
-    await realtime.createArtwork(session.id, { id, imageUrl: artwork.imageUrl, storagePath: artwork.storagePath, order: artworks.length }, { title: `${artwork.title || '작품'} 복사본`, artist: artwork.artist || '', description: artwork.description || '' });
+    const displayTitle = `${artwork.displayTitle || artwork.title || '이미지'} 복사본`;
+    await realtime.createArtwork(session.id, { id, imageUrl: artwork.imageUrl, storagePath: artwork.storagePath, displayTitle, order: artworks.length }, { title: displayTitle, artist: artwork.artist || '', description: artwork.description || '' });
   };
   const reorder = (artwork, direction) => realtime.reorderArtworks(session.id, moveId(artworks, artwork.id, direction));
+  const exhibitionNfcUrl = (artworkId) => `${window.location.origin}/client/${session.id}?exhibition=${encodeURIComponent(artworkId)}`;
+  const copyNfcUrl = async (artworkId) => {
+    await navigator.clipboard.writeText(exhibitionNfcUrl(artworkId));
+    setNfcCopiedId(artworkId);
+    window.setTimeout(() => setNfcCopiedId(''), 1800);
+  };
   const importFromSession = async () => {
     const sourceId = window.prompt('작품을 가져올 세션 ID를 입력하세요.');
     if (!sourceId?.trim() || sourceId.trim() === session.id) return;
@@ -213,7 +207,7 @@ function ArtworkStudio({ session, activeQuestion }) {
         const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
         const uploaded = await uploadMedia(session.id, 'artworks', id, blob, `original.${extension}`, { cacheControl: 'public,max-age=31536000,immutable', onProgress: (value) => setProgress(Math.round(((index + value / 100) / library.artworks.length) * 100)) });
         uploadedPaths.push(uploaded.path);
-        await realtime.createArtwork(session.id, { id, imageUrl: uploaded.url, storagePath: uploaded.path, order: artworks.length + index }, { title: source.title || '', artist: source.artist || '', description: source.description || '' });
+        await realtime.createArtwork(session.id, { id, imageUrl: uploaded.url, storagePath: uploaded.path, displayTitle: source.displayTitle || source.title || '', order: artworks.length + index }, { title: source.title || source.displayTitle || '', artist: source.artist || '', description: source.description || '' });
         importedIds.push(id);
       }
     } catch (reason) {
@@ -224,16 +218,17 @@ function ArtworkStudio({ session, activeQuestion }) {
   };
 
   return <section className="stack gap-lg">
-    {activeId ? <div className="active-media-controls"><strong>현재 작품 진행</strong><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn primary" onClick={() => setPhase('vote')}>투표</button><button className="btn" onClick={() => setPhase('reveal')}>원제 참고</button><button className="btn danger" onClick={() => realtime.updateSession(session.id, questionModePatch(session, activeQuestion))}>종료</button></div> : null}
-    <div className="asset-library-toolbar"><div><strong>작품 라이브러리</strong><span>순서 변경·수정·복제·다른 세션 가져오기를 지원합니다.</span></div><button className="btn" type="button" disabled={busy} onClick={importFromSession}>다른 세션에서 가져오기</button></div>
+    {activeId ? <div className="active-media-controls"><strong>{legacyArtworkActive ? '지난 모임 작품 활동' : '현재 이미지 표시 중'}</strong>{legacyArtworkActive ? <><button className="btn" onClick={() => setPhase('collect')}>제목 받기</button><button className="btn primary" onClick={() => setPhase('vote')}>투표</button><button className="btn" onClick={() => setPhase('reveal')}>원제 참고</button></> : null}<button className="btn danger" onClick={() => realtime.updateSession(session.id, questionModePatch(session, activeQuestion))}>종료</button></div> : null}
+    <div className="asset-library-toolbar"><div><strong>갤러리 이미지</strong><span>화면 표시와 결과 갤러리에 사용할 이미지를 관리합니다.</span></div><button className="btn" type="button" disabled={busy} onClick={importFromSession}>다른 세션에서 가져오기</button></div>
     <div className="asset-grid">{artworks.map((artwork, index) => <article className={`asset-card ${activeId === artwork.id ? 'active' : ''}`} key={artwork.id}>
-      <img src={artwork.imageUrl} alt={artwork.title || '작품'} /><div><strong>{artwork.title || '제목 미정'}</strong><span>{artwork.artist || '작가 미정'}</span>
+      <img src={artwork.imageUrl} alt={artwork.displayTitle || artwork.title || '세션 이미지'} /><div><strong>{artwork.displayTitle || artwork.title || '이름 없는 이미지'}</strong><span>{artwork.description || artwork.artist || '설명 없음'}</span>
       <div className="asset-order"><button disabled={index === 0} onClick={() => reorder(artwork, -1)}>←</button><button disabled={index === artworks.length - 1} onClick={() => reorder(artwork, 1)}>→</button><button onClick={() => edit(artwork)}>수정</button><button onClick={() => duplicate(artwork)}>복제</button></div>
       <div className="row gap-sm"><button className="btn primary" onClick={() => start(artwork)} disabled={busy}>화면에 띄우기</button><button className="btn danger" onClick={() => remove(artwork)}>삭제</button></div></div>
     </article>)}</div>
+    {artworks.length ? <section className="exhibition-nfc-links"><header><div><strong>NFC 카드 주소</strong><span>카드에 아래 주소를 URL 레코드로 기록하면 iPhone과 Android에서 바로 해당 전시가 열립니다.</span></div><button className="btn primary" type="button" disabled={busy} onClick={() => realtime.updateSession(session.id, { currentQuestionId: null, stage: { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false }, status: 'live' })}>전시 포도 시작</button></header><div>{artworks.map((artwork) => <article key={artwork.id}><img src={artwork.imageUrl} alt="" /><div><strong>{artwork.displayTitle || artwork.title || '이름 없는 전시'}</strong><code>{exhibitionNfcUrl(artwork.id)}</code></div><button type="button" onClick={() => copyNfcUrl(artwork.id)}>{nfcCopiedId === artwork.id ? '복사됨' : '주소 복사'}</button></article>)}</div></section> : null}
     <form className="media-upload-form" onSubmit={save}>
-      <label className={`media-dropzone ${preview ? 'has-preview' : ''}`}>{preview ? <img src={preview} alt="작품 미리보기" /> : <><strong>작품 이미지 선택</strong><span>12MB 미만</span></>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={choose} /></label>
-      <div className="stack gap-sm"><h3>{editingId ? '작품 정보 수정' : '새 작품 등록'}</h3><input className="input" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="실제 작품명 (필수)" /><input className="input" value={form.artist} onChange={(event) => setForm({ ...form, artist: event.target.value })} placeholder="작가명" /><textarea className="textarea" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="작품 설명" />{progress ? <progress className="upload-progress" value={progress} max="100" /> : null}{error || secretError ? <p className="error-text">{error || messageOf(secretError)}</p> : null}<div className="row gap-sm"><button className="btn primary" disabled={(!editingId && !file) || busy}>{busy ? progress ? `R2 업로드 ${progress}%` : '저장 중…' : editingId ? '수정 저장' : '작품 등록'}</button>{editingId ? <button className="btn" type="button" onClick={(clickEvent) => resetForm(clickEvent.currentTarget.closest('form'))}>취소</button> : null}</div></div>
+      <label className={`media-dropzone ${preview ? 'has-preview' : ''}`}>{preview ? <img src={preview} alt="이미지 미리보기" /> : <><strong>갤러리 이미지 선택</strong><span>12MB 미만</span></>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={choose} /></label>
+      <div className="stack gap-sm"><h3>{editingId ? '이미지 정보 수정' : '새 이미지 등록'}</h3><input className="input" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="이미지 이름 (필수)" /><input className="input" value={form.artist} onChange={(event) => setForm({ ...form, artist: event.target.value })} placeholder="작성자·출처 (선택)" /><textarea className="textarea" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="이미지 설명" />{progress ? <progress className="upload-progress" value={progress} max="100" /> : null}{error || secretError ? <p className="error-text">{error || messageOf(secretError)}</p> : null}<div className="row gap-sm"><button className="btn primary" disabled={(!editingId && !file) || busy}>{busy ? progress ? `R2 업로드 ${progress}%` : '저장 중…' : editingId ? '수정 저장' : '이미지 등록'}</button>{editingId ? <button className="btn" type="button" onClick={(clickEvent) => resetForm(clickEvent.currentTarget.closest('form'))}>취소</button> : null}</div></div>
     </form>
   </section>;
 }
@@ -289,5 +284,5 @@ function PdfStudio({ session, activeQuestion }) {
 export default function SessionMediaStudio({ session, questions = [] }) {
   const [tab, setTab] = useState('poster');
   const activeQuestion = questions.find((question) => question.id === session.currentQuestionId) || null;
-  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">SESSION ASSETS</p><h2>세션 준비실</h2><p className="muted">포스터, 작품, PDF를 미리 준비하고 순서를 정합니다.</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button><button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>작품 <b>{session.artworks?.length || 0}</b></button><button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} activeQuestion={activeQuestion} /> : <PdfStudio session={session} activeQuestion={activeQuestion} />}</div></section>;
+  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">OFFLINE SALON CORE</p><h2>세션 준비실</h2><p className="muted">포스터, 갤러리 이미지, PDF와 참여 활동을 준비합니다.</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button><button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>갤러리 이미지 <b>{session.artworks?.length || 0}</b></button><button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} activeQuestion={activeQuestion} /> : <PdfStudio session={session} activeQuestion={activeQuestion} />}</div></section>;
 }

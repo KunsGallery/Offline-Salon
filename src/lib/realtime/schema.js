@@ -28,7 +28,12 @@ export function cloneResponse(response) {
 }
 
 export function cloneParticipant(participant) {
-  return { ...participant };
+  return {
+    ...participant,
+    grapeSelections: Object.fromEntries(
+      Object.entries(participant?.grapeSelections || {}).map(([exhibitionId, selection]) => [exhibitionId, { ...selection }]),
+    ),
+  };
 }
 
 export function cloneSession(session) {
@@ -100,6 +105,8 @@ export function normalizeQuestion(question) {
     artworkId: question.artworkId || null,
     runId: question.runId || null,
     internal: question.internal === true,
+    likesEnabled: question.likesEnabled === true,
+    includeInGallery: question.includeInGallery === true,
   });
 }
 
@@ -128,6 +135,16 @@ export function normalizeParticipant(participantId, participant) {
     participantId,
     nickname: participant?.nickname ?? null,
     avatar: participant?.avatar && typeof participant.avatar === 'object' ? { ...participant.avatar } : null,
+    grapeSelections: participant?.grapeSelections && typeof participant.grapeSelections === 'object'
+      ? Object.fromEntries(Object.entries(participant.grapeSelections).map(([exhibitionId, selection]) => [exhibitionId, {
+        exhibitionId,
+        rating: Math.min(10, Math.max(1, Number(selection?.rating || 1))),
+        status: ['want', 'expecting', 'seen'].includes(selection?.status) ? selection.status : 'expecting',
+        tapCount: Math.max(1, Number(selection?.tapCount || 1)),
+        createdAt: selection?.createdAt || nowIso(),
+        updatedAt: selection?.updatedAt || selection?.createdAt || nowIso(),
+      }]))
+      : {},
     joinedAt: participant?.joinedAt || nowIso(),
     lastSeenAt: participant?.lastSeenAt || nowIso(),
   });
@@ -139,6 +156,7 @@ export function normalizeSession(session) {
     id: session.id,
     title: session.title || '새 세션',
     description: session.description || '실시간 인터랙티브 세션',
+    platform: session.platform || 'offline-salon-core',
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
     showResults: Boolean(session.showResults),
@@ -165,6 +183,8 @@ export function normalizeSession(session) {
       phase: session.stage?.phase || null,
       runId: session.stage?.runId || null,
       questionId: session.stage?.questionId || null,
+      view: session.stage?.view || null,
+      participantId: session.stage?.participantId || null,
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),
       fitMode: session.stage?.fitMode || 'fit',
@@ -267,6 +287,7 @@ export function createSessionTemplate(input = {}) {
     id: sessionId,
     title: input.title || '새 세션',
     description: input.description || '실시간 인터랙티브 세션',
+    platform: 'offline-salon-core',
     status: input.status || 'draft',
     currentQuestionId: null,
     showResults: false,

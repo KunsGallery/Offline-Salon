@@ -6,10 +6,11 @@ import LobbyHostView from '../components/host/LobbyHostView';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
-import { useResponses } from '../hooks/useResponses';
+import { useAllResponses, useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
-import { ArtworkGalleryHostView, ArtworkHostView, PdfHostView } from '../components/media/LiveMediaViews';
+import { ArtworkHostView, ImageHostView, PdfHostView, ResultGalleryHostView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
+import { ExhibitionGrapeHostView } from '../components/activities/ExhibitionGrapeViews';
 
 export default function HostDisplay() {
   const { sessionId } = useParams();
@@ -25,11 +26,12 @@ export default function HostDisplay() {
     loading: responsesLoading,
     error: responsesError,
   } = useResponses(sessionId, activeQuestion?.id || null);
+  const { responses: galleryResponses, error: galleryResponsesError } = useAllResponses(sessionId, session?.stage?.mode === 'gallery');
   const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
   const [likeEffects, setLikeEffects] = useState([]);
   const previousLikesRef = useRef({});
 
-  const realtimeError = sessionError || questionsError || participantsError || responsesError;
+  const realtimeError = sessionError || questionsError || participantsError || responsesError || galleryResponsesError;
   const realtimeLoading = sessionLoading || questionsLoading || participantsLoading || responsesLoading;
 
   useEffect(() => {
@@ -108,13 +110,22 @@ export default function HostDisplay() {
     return <div style={sessionThemeStyle(session)}><PdfHostView session={session} deck={deck} /></div>;
   }
 
+  if (session.stage?.mode === 'image') {
+    const image = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
+    return <div style={sessionThemeStyle(session)}><ImageHostView session={session} image={image} /></div>;
+  }
+
   if (session.stage?.mode === 'artwork') {
     const artwork = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
     return <div style={sessionThemeStyle(session)}><ArtworkHostView session={session} artwork={artwork} responses={visibleResponses} /></div>;
   }
 
   if (session.stage?.mode === 'gallery') {
-    return <div style={sessionThemeStyle(session)}><ArtworkGalleryHostView session={session} /></div>;
+    return <div style={sessionThemeStyle(session)}><ResultGalleryHostView session={session} questions={questions} responses={galleryResponses} participants={participants} /></div>;
+  }
+
+  if (session.stage?.mode === 'exhibition-grape') {
+    return <div style={sessionThemeStyle(session)}><ExhibitionGrapeHostView session={session} participants={participants} /></div>;
   }
 
   if (session.stage?.mode === 'lobby' || !activeQuestion) {

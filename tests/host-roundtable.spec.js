@@ -61,6 +61,7 @@ function roundtableState(responseCount = 8) {
           description: '다른 사람의 답을 들으며 내 생각도 천천히 꺼내보세요.',
           type: 'text',
           options: [],
+          likesEnabled: true,
           order: 0,
           isActive: true,
           createdAt: '2026-08-03T09:00:00.000Z',
@@ -185,6 +186,96 @@ test('lobby seats joined participants as chosen vector characters', async ({ pag
   expect(overflow).toBe(false);
 });
 
+test('core result gallery groups every included result by participant and supports generic likes', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.stage = { mode: 'gallery', page: 1, blackout: false };
+  session.questions = [
+    { id: 'core_reflection', title: '오늘의 한 문장', description: '', type: 'text', options: [], order: 0, isActive: false, likesEnabled: true, includeInGallery: true },
+    { id: 'core_choice', title: '내가 고른 키워드', description: '', type: 'poll', options: ['연결', '발견'], order: 1, isActive: false, likesEnabled: false, includeInGallery: true },
+    { id: 'not_in_gallery', title: '비공개 회고', description: '', type: 'text', options: [], order: 2, isActive: false, likesEnabled: true, includeInGallery: false },
+  ];
+  session.participants = {
+    guest_1: { participantId: 'guest_1', nickname: '민지', avatar: { shape: 'round', color: 'berry' }, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:10:00.000Z' },
+    guest_2: { participantId: 'guest_2', nickname: '준호', avatar: { shape: 'diamond', color: 'moss' }, joinedAt: '2026-08-03T09:01:00.000Z', lastSeenAt: '2026-08-03T09:11:00.000Z' },
+  };
+  session.responses = [
+    { id: 'core_1', questionId: 'core_reflection', participantId: 'guest_1', nickname: '민지', value: '서로의 관점을 발견했다.', likes: 2, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:20:00.000Z' },
+    { id: 'core_2', questionId: 'core_choice', participantId: 'guest_1', nickname: '민지', value: '발견', likes: 7, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:21:00.000Z' },
+    { id: 'core_3', questionId: 'core_reflection', participantId: 'guest_2', nickname: '준호', value: '다음 대화를 기대하게 됐다.', likes: 0, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:22:00.000Z' },
+    { id: 'private_1', questionId: 'not_in_gallery', participantId: 'guest_2', nickname: '준호', value: '갤러리에 나오면 안 됨', likes: 5, likedBy: {}, hidden: false, createdAt: '2026-08-03T09:23:00.000Z' },
+  ];
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_roundtable', 'guest_1');
+    localStorage.setItem('offline-salon:nickname:session_roundtable', '민지');
+  }, { key: STORAGE_KEY, value: state });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_roundtable');
+  await expect(page.locator('.result-gallery-stage')).toBeVisible();
+  await expect(page.locator('.participant-result-card')).toHaveCount(2);
+  await expect(page.locator('.participant-result-card').filter({ hasText: '민지' }).locator('.participant-result-entry')).toHaveCount(2);
+  await expect(page.locator('.participant-result-card').filter({ hasText: '민지' }).locator('header > b')).toHaveText('♥ 2');
+  await expect(page.locator('.participant-result-entry').filter({ hasText: '내가 고른 키워드' }).locator('b')).toHaveCount(0);
+  await expect(page.getByText('갤러리에 나오면 안 됨')).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_roundtable');
+  const junhoResults = page.locator('.mobile-result-groups > section').filter({ hasText: '준호' });
+  await expect(page.locator('.mobile-result-groups article').filter({ hasText: '내가 고른 키워드' }).locator('button')).toHaveCount(0);
+  await expect(junhoResults).toContainText('다음 대화를 기대하게 됐다.');
+  await junhoResults.getByRole('button', { name: '♡ 0' }).click();
+  await expect(junhoResults.getByRole('button', { name: '♥ 1' })).toBeVisible();
+});
+
+test('exhibition grape opens an NFC-linked poster, saves a rating and updates host counts', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
+  session.artworks = [
+    { id: 'exhibition_1', displayTitle: '빛이 머무는 자리', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="420"%3E%3Crect width="300" height="420" fill="%236d3478"/%3E%3C/svg%3E', order: 0 },
+    { id: 'exhibition_2', displayTitle: '여름의 표면', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="420"%3E%3Crect width="300" height="420" fill="%2378983f"/%3E%3C/svg%3E', order: 1 },
+  ];
+  session.participants = {
+    guest_1: { participantId: 'guest_1', nickname: '민지', avatar: { shape: 'round', color: 'berry' }, grapeSelections: {}, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:10:00.000Z' },
+  };
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_roundtable', 'guest_1');
+    localStorage.setItem('offline-salon:nickname:session_roundtable', '민지');
+  }, { key: STORAGE_KEY, value: state });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_roundtable?exhibition=exhibition_1');
+  await expect(page.locator('.grape-rating-editor')).toContainText('빛이 머무는 자리');
+  await page.getByRole('button', { name: '보고 왔어요' }).click();
+  await page.locator('.grape-rating-range input').fill('9');
+  await page.getByRole('button', { name: '내 포도에 한 알 추가' }).click();
+  await expect(page.locator('.exhibition-grape.filled')).toHaveCount(1);
+  await expect(page.locator('.exhibition-grape.filled')).toHaveAttribute('aria-label', /9점/);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/host/session_roundtable');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.locator('.grape-host-live')).toBeVisible();
+  await expect(page.locator('.grape-host-live article').filter({ hasText: '빛이 머무는 자리' }).locator('.exhibition-flip-number')).toHaveText('01');
+
+  await page.evaluate(() => { window.history.pushState({}, '', '/remote/session_roundtable'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await page.locator('.grape-remote-people > button').filter({ hasText: '민지' }).click();
+  await page.evaluate(() => { window.history.pushState({}, '', '/host/session_roundtable'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await expect(page.locator('.grape-host-person')).toBeVisible();
+
+  await page.evaluate(() => { window.history.pushState({}, '', '/remote/session_roundtable'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await page.getByRole('button', { name: '전체 포도밭' }).click();
+  await page.evaluate(() => { window.history.pushState({}, '', '/host/session_roundtable'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await expect(page.locator('.grape-host-collective')).toBeVisible();
+});
+
 test('admin adopts a submitted title and opens the final artwork gallery', async ({ page, context }) => {
   const state = roundtableState(0);
   const session = state.sessions.session_roundtable;
@@ -247,8 +338,8 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await expect.poll(() => hostPage.locator('.artwork-gallery-grid').evaluate((node) => Math.round(node.scrollTop))).toBe(0);
   await hostPage.close();
 
-  const adoptedArtworkCard = page.locator('.remote-asset-card').filter({ hasText: '달이 머문 자리 · 채택 완료' });
-  await adoptedArtworkCard.getByRole('button', { name: '제목 기록' }).click();
+  const adoptedArtworkCard = page.locator('.remote-asset-card').filter({ hasText: '달이 머문 자리' });
+  await adoptedArtworkCard.getByRole('button', { name: '지난 제목 기록' }).click();
   const titleArchive = page.getByRole('region', { name: '달이 머문 자리 제목 기록' });
   await expect(titleArchive).toBeVisible();
   await expect(titleArchive.locator('li')).toHaveCount(2);
@@ -264,28 +355,19 @@ test('admin adopts a submitted title and opens the final artwork gallery', async
   await titleArchive.getByRole('button', { name: '제목 기록 닫기' }).click();
   await expect(titleArchive).toHaveCount(0);
 
-  const legacyArtworkCard = page.locator('.remote-asset-card').filter({ hasText: '먼저 채택된 제목 · 채택 완료' });
-  await legacyArtworkCard.getByRole('button', { name: '제목 기록' }).click();
+  const legacyArtworkCard = page.locator('.remote-asset-card').filter({ hasText: '먼저 채택된 제목' });
+  await legacyArtworkCard.getByRole('button', { name: '지난 제목 기록' }).click();
   const legacyTitleArchive = page.getByRole('region', { name: '먼저 채택된 제목 제목 기록' });
   await expect(legacyTitleArchive.locator('li')).toHaveCount(2);
   await expect(legacyTitleArchive.locator('li.adopted')).toContainText('먼저 채택된 제목');
   await expect(legacyTitleArchive.getByText('오래된 다른 제목', { exact: true })).toBeVisible();
   await legacyTitleArchive.getByRole('button', { name: '제목 기록 닫기' }).click();
 
-  await page.locator('.remote-asset-grid button').filter({ hasText: '먼저 채택된 제목 · 채택 완료' }).click();
-  await expect.poll(() => page.evaluate((key) => {
-    const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
-    return { artworkId: current.stage.artworkId, phase: current.stage.phase, questionCount: current.questions.length };
-  }, STORAGE_KEY)).toEqual({ artworkId: 'work_2', phase: 'reveal', questionCount: 2 });
-  await page.locator('.remote-asset-grid button').filter({ hasText: '달이 머문 자리 · 채택 완료' }).click();
-  await expect.poll(() => page.evaluate((key) => {
-    const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
-    return { artworkId: current.stage.artworkId, phase: current.stage.phase, questionId: current.stage.questionId, questionCount: current.questions.length, adoptedTitle: current.artworks[0].adoptedTitle };
-  }, STORAGE_KEY)).toEqual({ artworkId: 'work_1', phase: 'reveal', questionId: 'art_title_question', questionCount: 2, adoptedTitle: '달이 머문 자리' });
+  await adoptedArtworkCard.getByRole('button', { name: '지난 제목 기록' }).click();
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: '“달이 머문 자리” 제목 삭제' }).first().click();
+  await page.getByRole('region', { name: '달이 머문 자리 제목 기록' }).getByRole('button', { name: '“달이 머문 자리” 제목 삭제' }).click();
   await expect.poll(() => page.evaluate((key) => {
     const current = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
-    return { phase: current.stage.phase, responseCount: current.responses.length, adoptedTitle: current.artworks[0].adoptedTitle, adoptedResponseId: current.artworks[0].adoptedResponseId };
-  }, STORAGE_KEY)).toEqual({ phase: 'vote', responseCount: 2, adoptedTitle: null, adoptedResponseId: null });
+    return { mode: current.stage.mode, responseCount: current.responses.length, adoptedTitle: current.artworks[0].adoptedTitle, adoptedResponseId: current.artworks[0].adoptedResponseId };
+  }, STORAGE_KEY)).toEqual({ mode: 'gallery', responseCount: 2, adoptedTitle: null, adoptedResponseId: null });
 });

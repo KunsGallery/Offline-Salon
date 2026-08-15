@@ -37,7 +37,7 @@ export default function ResponseNote({
           <strong>{displayNickname}</strong>
           <span className="tiny muted">{formatCompactTime(response?.createdAt)}</span>
         </div>
-        <span className="badge like-badge">{likeCount} likes</span>
+        {onLike ? <span className="badge like-badge">{likeCount} likes</span> : null}
       </header>
       <p className="response-note-body">{safeJoin(response?.value)}</p>
       <footer className="response-note-actions">

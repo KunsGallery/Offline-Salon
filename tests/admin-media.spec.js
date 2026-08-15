@@ -54,24 +54,41 @@ test('poster palette is saved and applied to the session theme', async ({ page }
   await expect(page.locator('.theme-live-preview')).toBeVisible();
 });
 
-test('artwork image and private title can be registered and edited', async ({ page }) => {
-  await page.locator('.media-tabs').getByRole('button', { name: /작품/ }).click();
+test('question activities can enable generic likes and participant result gallery', async ({ page }) => {
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
+  await page.locator('.question-card').first().getByRole('button', { name: '수정' }).click();
+  await page.locator('.question-feature-toggles input[type="checkbox"]').nth(0).check();
+  await page.locator('.question-feature-toggles input[type="checkbox"]').nth(1).check();
+  await page.getByRole('button', { name: '질문 저장' }).click();
+  await expect(page.locator('.question-card').first()).toContainText('♡ 좋아요');
+  await expect(page.locator('.question-card').first()).toContainText('▦ 결과 갤러리');
+  await expect.poll(() => page.evaluate(() => {
+    const question = JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.questions[0];
+    return { likesEnabled: question.likesEnabled, includeInGallery: question.includeInGallery };
+  })).toEqual({ likesEnabled: true, includeInGallery: true });
+});
+
+test('gallery image is registered and presented without creating a title activity', async ({ page }) => {
+  await page.locator('.media-tabs').getByRole('button', { name: /갤러리 이미지/ }).click();
   await page.locator('.media-upload-form input[type="file"]').setInputFiles({ name: 'artwork.png', mimeType: 'image/png', buffer: await imageBuffer(page, '#614ad9') });
-  await page.getByPlaceholder('실제 작품명 (필수)').fill('테스트 작품명');
-  await page.getByPlaceholder('작가명').fill('테스트 작가');
-  await page.getByPlaceholder('작품 설명').fill('테스트 설명');
-  await page.getByRole('button', { name: '작품 등록' }).click();
-  const card = page.locator('.asset-card').filter({ hasText: '테스트 작품명' });
+  await page.getByPlaceholder('이미지 이름 (필수)').fill('테스트 이미지');
+  await page.getByPlaceholder('작성자·출처 (선택)').fill('테스트 출처');
+  await page.getByPlaceholder('이미지 설명').fill('테스트 설명');
+  await page.getByRole('button', { name: '이미지 등록' }).click();
+  const card = page.locator('.asset-card').filter({ hasText: '테스트 이미지' });
   await expect(card).toBeVisible();
   const data = await page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')));
   const artwork = data.sessions.session_demo.artworks[0];
   expect(artwork.title).toBeUndefined();
-  expect(data.sessions.session_demo.artworkSecrets[artwork.id].title).toBe('테스트 작품명');
+  expect(artwork.displayTitle).toBe('테스트 이미지');
+  expect(data.sessions.session_demo.artworkSecrets[artwork.id].title).toBe('테스트 이미지');
   await card.getByRole('button', { name: '화면에 띄우기' }).click();
   await page.locator('.admin-workspace-tabs').getByRole('button', { name: /라이브 진행/ }).click();
-  await expect(page.locator('.stage-preview.stage-artwork')).toBeVisible();
-  await page.locator('.live-operation-card').getByRole('button', { name: '원제 참고' }).click();
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.stage.reveal?.title)).toBe('테스트 작품명');
+  await expect(page.locator('.stage-preview.stage-image')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const session = JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo;
+    return { mode: session.stage.mode, artworkTitleQuestions: session.questions.filter((question) => question.type === 'artwork-title').length };
+  })).toEqual({ mode: 'image', artworkTitleQuestions: 0 });
 });
 
 test('PDF is analyzed, linked and registered', async ({ page, context }) => {

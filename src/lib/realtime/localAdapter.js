@@ -240,6 +240,10 @@ function toggleResponseLikeState(sessionId, responseId, participantId) {
   const session = ensureSession(sessionId);
   const response = session.responses.find((item) => item.id === responseId);
   if (!response) return null;
+  const question = session.questions.find((item) => item.id === response.questionId);
+  if (question?.likesEnabled !== true && question?.type !== 'artwork-title') {
+    throw new Error('이 활동은 좋아요 투표를 사용하지 않습니다.');
+  }
   const likedBy = { ...(response.likedBy || {}) };
   if (response.participantId === participantId) {
     return cloneResponse(response);
@@ -442,6 +446,8 @@ const localAdapter = {
       artworkId: input.artworkId || null,
       runId: input.runId || null,
       internal: input.internal === true,
+      likesEnabled: input.likesEnabled === true,
+      includeInGallery: input.includeInGallery === true,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     });

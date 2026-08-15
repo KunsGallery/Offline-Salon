@@ -8,11 +8,13 @@ import ResponseNote from '../components/host/ResponseNote';
 import { mode, realtime } from '../lib/realtime';
 import { useSession } from '../hooks/useSession';
 import { useQuestions } from '../hooks/useQuestions';
-import { useResponses } from '../hooks/useResponses';
+import { useAllResponses, useResponses } from '../hooks/useResponses';
+import { useParticipants } from '../hooks/useParticipants';
 import { createParticipantId } from '../lib/ids';
 import { safeJoin } from '../lib/format';
-import { ArtworkGalleryParticipantView, ArtworkParticipantView, PdfParticipantView } from '../components/media/LiveMediaViews';
+import { ArtworkParticipantView, ImageParticipantView, PdfParticipantView, ResultGalleryParticipantView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
+import { ExhibitionGrapeParticipantView } from '../components/activities/ExhibitionGrapeViews';
 
 function storageKey(sessionId, key) {
   return `offline-salon:${key}:${sessionId}`;
@@ -58,6 +60,10 @@ export default function ParticipantApp() {
   const [likingResponseId, setLikingResponseId] = useState(null);
   const [actionError, setActionError] = useState('');
   const { responses, loading: responsesLoading, error: responsesError } = useResponses(sessionId, currentQuestion?.id || null);
+  const { responses: galleryResponses, error: galleryResponsesError } = useAllResponses(sessionId, session?.stage?.mode === 'gallery');
+  const { participants, loading: participantsLoading, error: participantsError } = useParticipants(sessionId);
+  const participant = participants.find((item) => item.participantId === participantId) || null;
+  const requestedExhibitionId = useMemo(() => new URLSearchParams(window.location.search).get('exhibition') || '', []);
 
   const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
   const myResponse = useMemo(
@@ -74,8 +80,8 @@ export default function ParticipantApp() {
         .sort((a, b) => (b.likes || 0) - (a.likes || 0) || new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)),
     [myResponse?.id, visibleResponses],
   );
-  const realtimeError = sessionError || questionsError || responsesError;
-  const realtimeLoading = sessionLoading || questionsLoading || responsesLoading;
+  const realtimeError = sessionError || questionsError || responsesError || galleryResponsesError || participantsError;
+  const realtimeLoading = sessionLoading || questionsLoading || responsesLoading || participantsLoading;
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -231,6 +237,23 @@ export default function ParticipantApp() {
     }
   };
 
+  const handleSaveGrapeSelection = async (exhibitionId, selection) => {
+    const previous = participant?.grapeSelections?.[exhibitionId];
+    const now = new Date().toISOString();
+    const grapeSelections = {
+      ...(participant?.grapeSelections || {}),
+      [exhibitionId]: {
+        exhibitionId,
+        rating: selection.rating,
+        status: selection.status,
+        tapCount: Number(previous?.tapCount || 0) + 1,
+        createdAt: previous?.createdAt || now,
+        updatedAt: now,
+      },
+    };
+    await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, { nickname, grapeSelections }));
+  };
+
   if (!participantId || !nickname) {
     return (
       <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
@@ -239,9 +262,18 @@ export default function ParticipantApp() {
     );
   }
 
+  if (session.stage?.mode === 'exhibition-grape') {
+    return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} requestedExhibitionId={requestedExhibitionId} onSaveSelection={handleSaveGrapeSelection} /></div>;
+  }
+
   if (session.stage?.mode === 'pdf') {
     const deck = (session.decks || []).find((item) => item.id === session.stage.deckId);
     return <div style={accentStyle}><PdfParticipantView deck={deck} page={Math.max(1, Number(session.stage.page || 1))} /></div>;
+  }
+
+  if (session.stage?.mode === 'image') {
+    const image = (session.artworks || []).find((item) => item.id === session.stage.artworkId);
+    return <div style={accentStyle}><ImageParticipantView image={image} /></div>;
   }
 
   if (session.stage?.mode === 'artwork') {
@@ -250,7 +282,7 @@ export default function ParticipantApp() {
   }
 
   if (session.stage?.mode === 'gallery') {
-    return <div style={accentStyle}><ArtworkGalleryParticipantView session={session} /></div>;
+    return <div style={accentStyle}><ResultGalleryParticipantView session={session} questions={questionPool} responses={galleryResponses} participants={participants} participantId={participantId} onLike={handleToggleLike} likingResponseId={likingResponseId} /></div>;
   }
 
   if (session.stage?.mode === 'lobby' || !currentQuestion) {
@@ -301,7 +333,7 @@ export default function ParticipantApp() {
                 <button className="client-primary-button" type="button" onClick={handleEdit}>
                   수정하기
                 </button>
-                <span className="badge">좋아요 {myResponse.likes || 0}</span>
+                {currentQuestion.likesEnabled ? <span className="badge">좋아요 {myResponse.likes || 0}</span> : null}
               </div>
             </article>
 
@@ -309,7 +341,7 @@ export default function ParticipantApp() {
               <div className="panel-header compact">
                 <div>
                   <h2>다른 사람들의 조각</h2>
-                  <p className="muted">공개된 답변만 보이고, 좋아요는 실시간으로 반영됩니다.</p>
+                  <p className="muted">{currentQuestion.likesEnabled ? '공개된 답변의 좋아요가 실시간으로 반영됩니다.' : '공개된 다른 참여자의 답변을 함께 확인할 수 있습니다.'}</p>
                 </div>
                 <span className="badge">{otherResponses.length}</span>
               </div>
@@ -326,7 +358,7 @@ export default function ParticipantApp() {
                       key={response.id}
                       response={response}
                       participantId={participantId}
-                      onLike={handleToggleLike}
+                      onLike={currentQuestion.likesEnabled ? handleToggleLike : null}
                       burstCount={0}
                       busy={likingResponseId === response.id}
                     />

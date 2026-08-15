@@ -6,6 +6,8 @@ const DEFAULT_QUESTION = {
   description: '',
   type: 'text',
   optionsText: '',
+  likesEnabled: false,
+  includeInGallery: false,
 };
 
 export default function QuestionEditor({ session, question }) {
@@ -20,6 +22,8 @@ export default function QuestionEditor({ session, question }) {
             description: question.description || '',
             type: question.type || 'text',
             optionsText: (question.options || []).join('\n'),
+            likesEnabled: question.likesEnabled === true,
+            includeInGallery: question.includeInGallery === true,
           }
         : DEFAULT_QUESTION,
     );
@@ -43,6 +47,8 @@ export default function QuestionEditor({ session, question }) {
           description: draft.description.trim(),
           type: draft.type,
           options,
+          likesEnabled: draft.likesEnabled,
+          includeInGallery: draft.includeInGallery,
         }),
       );
     } else {
@@ -52,6 +58,8 @@ export default function QuestionEditor({ session, question }) {
           description: draft.description.trim(),
           type: draft.type,
           options,
+          likesEnabled: draft.likesEnabled,
+          includeInGallery: draft.includeInGallery,
         }),
       );
       setDraft(DEFAULT_QUESTION);
@@ -115,6 +123,17 @@ export default function QuestionEditor({ session, question }) {
         ) : (
           <p className="muted tiny">wordcloud/text 타입은 선택지가 필요하지 않습니다.</p>
         )}
+
+        <div className="question-feature-toggles">
+          <label className="toggle">
+            <input type="checkbox" checked={draft.likesEnabled} onChange={(event) => setDraft((current) => ({ ...current, likesEnabled: event.target.checked }))} />
+            <span><strong>좋아요 투표 사용</strong><small>참여자가 다른 사람의 답변이나 결과에 좋아요를 누를 수 있습니다.</small></span>
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={draft.includeInGallery} onChange={(event) => setDraft((current) => ({ ...current, includeInGallery: event.target.checked }))} />
+            <span><strong>결과 갤러리에 포함</strong><small>이 질문의 참여자별 결과를 마지막 결과 갤러리에 모아 보여줍니다.</small></span>
+          </label>
+        </div>
 
         <button className="btn primary" type="submit">
           {isEditing ? '질문 저장' : '질문 추가'}
