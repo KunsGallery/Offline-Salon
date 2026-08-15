@@ -125,6 +125,7 @@ function fromParticipantDoc(participantId, data) {
     participantId,
     nickname: data.nickname,
     avatar: data.avatar || null,
+    grapeSelections: data.grapeSelections || {},
     joinedAt: toIso(data.joinedAt),
     lastSeenAt: toIso(data.lastSeenAt),
   });
