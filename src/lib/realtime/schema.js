@@ -31,7 +31,7 @@ export function cloneParticipant(participant) {
   return {
     ...participant,
     grapeSelections: Object.fromEntries(
-      Object.entries(participant?.grapeSelections || {}).map(([exhibitionId, selection]) => [exhibitionId, { ...selection }]),
+      Object.entries(participant?.grapeSelections || {}).map(([selectionId, selection]) => [selectionId, { ...selection }]),
     ),
   };
 }
@@ -136,11 +136,15 @@ export function normalizeParticipant(participantId, participant) {
     nickname: participant?.nickname ?? null,
     avatar: participant?.avatar && typeof participant.avatar === 'object' ? { ...participant.avatar } : null,
     grapeSelections: participant?.grapeSelections && typeof participant.grapeSelections === 'object'
-      ? Object.fromEntries(Object.entries(participant.grapeSelections).map(([exhibitionId, selection]) => [exhibitionId, {
-        exhibitionId,
+      ? Object.fromEntries(Object.entries(participant.grapeSelections).map(([selectionId, selection]) => [selectionId, {
+        id: selection?.id || selectionId,
+        title: String(selection?.title || '').trim(),
+        venue: String(selection?.venue || '').trim(),
+        photoUrl: selection?.photoUrl || '',
+        photoPath: selection?.photoPath || null,
         rating: Math.min(10, Math.max(1, Number(selection?.rating || 1))),
         status: ['want', 'expecting', 'seen'].includes(selection?.status) ? selection.status : 'expecting',
-        tapCount: Math.max(1, Number(selection?.tapCount || 1)),
+        source: selection?.source === 'nfc' ? 'nfc' : 'participant',
         createdAt: selection?.createdAt || nowIso(),
         updatedAt: selection?.updatedAt || selection?.createdAt || nowIso(),
       }]))

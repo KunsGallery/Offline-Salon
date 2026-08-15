@@ -32,7 +32,7 @@
  * @typedef {Object} InteractiveParticipant
  * @property {string} participantId
  * @property {string|null} nickname
- * @property {Record<string, {exhibitionId: string, status: 'want'|'expecting'|'seen', rating: number, tapCount: number, createdAt: string, updatedAt: string}>} grapeSelections
+ * @property {Record<string, {id: string, title: string, venue: string, photoUrl: string, photoPath: string|null, status: 'want'|'expecting'|'seen', rating: number, source: 'participant'|'nfc', createdAt: string, updatedAt: string}>} grapeSelections
  * @property {string} joinedAt
  * @property {string} lastSeenAt
  *

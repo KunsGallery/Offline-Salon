@@ -230,15 +230,12 @@ test('core result gallery groups every included result by participant and suppor
   await expect(junhoResults.getByRole('button', { name: '♥ 1' })).toBeVisible();
 });
 
-test('exhibition grape opens an NFC-linked poster, saves a rating and updates host counts', async ({ page }) => {
+test('participant creates an exhibition grape from their own photo and updates host counts', async ({ page }) => {
   const state = roundtableState(0);
   const session = state.sessions.session_roundtable;
   session.currentQuestionId = null;
   session.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
-  session.artworks = [
-    { id: 'exhibition_1', displayTitle: '빛이 머무는 자리', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="420"%3E%3Crect width="300" height="420" fill="%236d3478"/%3E%3C/svg%3E', order: 0 },
-    { id: 'exhibition_2', displayTitle: '여름의 표면', imageUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="420"%3E%3Crect width="300" height="420" fill="%2378983f"/%3E%3C/svg%3E', order: 1 },
-  ];
+  session.artworks = [];
   session.participants = {
     guest_1: { participantId: 'guest_1', nickname: '민지', avatar: { shape: 'round', color: 'berry' }, grapeSelections: {}, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:10:00.000Z' },
   };
@@ -249,8 +246,15 @@ test('exhibition grape opens an NFC-linked poster, saves a rating and updates ho
   }, { key: STORAGE_KEY, value: state });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/client/session_roundtable?exhibition=exhibition_1');
-  await expect(page.locator('.grape-rating-editor')).toContainText('빛이 머무는 자리');
+  await page.goto('/client/session_roundtable?add=1&nfc=1');
+  await expect(page.locator('.grape-entry-editor')).toContainText('내 전시 한 알 만들기');
+  await page.locator('.grape-photo-picker input').first().setInputFiles({
+    name: 'visit.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><rect width="300" height="420" fill="#6d3478"/></svg>'),
+  });
+  await page.getByPlaceholder('예: 마르크 샤갈 특별전').fill('빛이 머무는 자리');
+  await page.getByPlaceholder('예: 예술의전당 한가람미술관').fill('아트 스페이스');
   await page.getByRole('button', { name: '보고 왔어요' }).click();
   await page.locator('.grape-rating-range input').fill('9');
   await page.getByRole('button', { name: '내 포도에 한 알 추가' }).click();

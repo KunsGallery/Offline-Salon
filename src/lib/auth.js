@@ -2,6 +2,7 @@ import {
   GoogleAuthProvider,
   getRedirectResult,
   onAuthStateChanged,
+  signInAnonymously,
   signInWithPopup,
   signInWithRedirect,
   signOut,
@@ -22,6 +23,13 @@ export function hasFirebaseAuth() {
 
 export function getCurrentUser() {
   return auth?.currentUser || null;
+}
+
+export async function ensureParticipantUser() {
+  if (!auth) throw new Error(authUnavailableMessage);
+  if (auth.currentUser) return auth.currentUser;
+  const result = await signInAnonymously(auth);
+  return result.user;
 }
 
 export function subscribeAuth(callback, onError) {

@@ -10,11 +10,13 @@ import { useSession } from '../hooks/useSession';
 import { useQuestions } from '../hooks/useQuestions';
 import { useAllResponses, useResponses } from '../hooks/useResponses';
 import { useParticipants } from '../hooks/useParticipants';
-import { createParticipantId } from '../lib/ids';
+import { createId, createParticipantId } from '../lib/ids';
 import { safeJoin } from '../lib/format';
 import { ArtworkParticipantView, ImageParticipantView, PdfParticipantView, ResultGalleryParticipantView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeParticipantView } from '../components/activities/ExhibitionGrapeViews';
+import { uploadParticipantPhoto } from '../lib/media';
+import { prepareParticipantPhoto } from '../lib/participantPhoto';
 
 function storageKey(sessionId, key) {
   return `offline-salon:${key}:${sessionId}`;
@@ -63,7 +65,15 @@ export default function ParticipantApp() {
   const { responses: galleryResponses, error: galleryResponsesError } = useAllResponses(sessionId, session?.stage?.mode === 'gallery');
   const { participants, loading: participantsLoading, error: participantsError } = useParticipants(sessionId);
   const participant = participants.find((item) => item.participantId === participantId) || null;
-  const requestedExhibitionId = useMemo(() => new URLSearchParams(window.location.search).get('exhibition') || '', []);
+  const grapeEntryRequest = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      open: params.get('add') === '1' || Boolean(params.get('title')),
+      title: params.get('title') || '',
+      venue: params.get('venue') || '',
+      source: params.get('nfc') === '1' ? 'nfc' : 'participant',
+    };
+  }, []);
 
   const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
   const myResponse = useMemo(
@@ -237,16 +247,30 @@ export default function ParticipantApp() {
     }
   };
 
-  const handleSaveGrapeSelection = async (exhibitionId, selection) => {
-    const previous = participant?.grapeSelections?.[exhibitionId];
+  const handleSaveGrapeSelection = async (selection) => {
+    const selectionId = selection.id || createId('grape');
+    const previous = participant?.grapeSelections?.[selectionId];
     const now = new Date().toISOString();
+    let photoUrl = previous?.photoUrl || '';
+    let photoPath = previous?.photoPath || null;
+    if (selection.photoFile) {
+      const prepared = await prepareParticipantPhoto(selection.photoFile);
+      const uploaded = await uploadParticipantPhoto(sessionId, selectionId, prepared);
+      photoUrl = uploaded.url;
+      photoPath = uploaded.path;
+    }
+    if (!photoUrl) throw new Error('전시에서 찍은 사진을 선택해 주세요.');
     const grapeSelections = {
       ...(participant?.grapeSelections || {}),
-      [exhibitionId]: {
-        exhibitionId,
+      [selectionId]: {
+        id: selectionId,
+        title: selection.title.trim(),
+        venue: selection.venue.trim(),
+        photoUrl,
+        photoPath,
         rating: selection.rating,
         status: selection.status,
-        tapCount: Number(previous?.tapCount || 0) + 1,
+        source: selection.source === 'nfc' ? 'nfc' : 'participant',
         createdAt: previous?.createdAt || now,
         updatedAt: now,
       },
@@ -263,7 +287,7 @@ export default function ParticipantApp() {
   }
 
   if (session.stage?.mode === 'exhibition-grape') {
-    return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} requestedExhibitionId={requestedExhibitionId} onSaveSelection={handleSaveGrapeSelection} /></div>;
+    return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} entryRequest={grapeEntryRequest} onSaveSelection={handleSaveGrapeSelection} /></div>;
   }
 
   if (session.stage?.mode === 'pdf') {

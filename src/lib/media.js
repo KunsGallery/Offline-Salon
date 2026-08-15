@@ -1,4 +1,4 @@
-import { getCurrentUser } from './auth';
+import { ensureParticipantUser, getCurrentUser } from './auth';
 import { mode } from './realtime';
 
 const objectUrls = new Set();
@@ -25,6 +25,20 @@ export async function uploadMedia(sessionId, category, id, file, filename, metad
   return { url: signed.publicUrl, path: signed.key };
 }
 
+export async function uploadParticipantPhoto(sessionId, id, file, metadata = {}) {
+  if (mode !== 'firestore') return { url: localUrl(file), path: null };
+  const user = await ensureParticipantUser();
+  const signed = await requestMediaAction({
+    action: 'sign-participant-upload',
+    sessionId,
+    assetId: id,
+    contentType: file.type,
+    size: file.size,
+  }, user);
+  await uploadToSignedUrl(signed, file, metadata.onProgress);
+  return { url: signed.publicUrl, path: signed.key };
+}
+
 export async function removeMedia(path) {
   if (!path || mode !== 'firestore') return;
   await requestMediaAction({ action: 'delete', key: path });
@@ -40,8 +54,8 @@ export async function getMediaStorageStatus() {
   return requestMediaAction({ action: 'health' });
 }
 
-async function requestMediaAction(payload) {
-  const user = getCurrentUser();
+async function requestMediaAction(payload, requestedUser = null) {
+  const user = requestedUser || getCurrentUser();
   if (!user) throw new Error('관리자 로그인 후 다시 시도해 주세요.');
   const token = await user.getIdToken();
   const response = await fetch('/.netlify/functions/r2-media', {

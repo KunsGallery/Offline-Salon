@@ -5,6 +5,7 @@ import { decodeProtectedHeader, importX509, jwtVerify } from 'jose';
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_TYPE = 'application/pdf';
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_PARTICIPANT_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 const FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
 let certificateCache = { expiresAt: 0, values: {} };
@@ -46,9 +47,9 @@ async function firebaseCertificates() {
   return certificateCache.values;
 }
 
-async function requireAdmin(request) {
+async function requireFirebaseUser(request) {
   const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ')) throw Object.assign(new Error('관리자 로그인이 필요합니다.'), { status: 401, code: 'AUTH_REQUIRED' });
+  if (!authorization.startsWith('Bearer ')) throw Object.assign(new Error('Firebase 로그인이 필요합니다.'), { status: 401, code: 'AUTH_REQUIRED' });
   const token = authorization.slice(7);
   const projectId = required('FIREBASE_PROJECT_ID');
   const header = decodeProtectedHeader(token);
@@ -59,6 +60,11 @@ async function requireAdmin(request) {
   const { payload: decoded } = await jwtVerify(token, key, { algorithms: ['RS256'], audience: projectId, issuer: `https://securetoken.google.com/${projectId}` });
   const now = Math.floor(Date.now() / 1000);
   if (!decoded.sub || decoded.iat > now || decoded.auth_time > now) throw Object.assign(new Error('Firebase 로그인 토큰 시간이 올바르지 않습니다.'), { status: 401, code: 'INVALID_AUTH_TIME' });
+  return decoded;
+}
+
+async function requireAdmin(request) {
+  const decoded = await requireFirebaseUser(request);
   const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
   if (decoded.email && allowedEmails.includes(decoded.email.toLowerCase())) return decoded;
   if (decoded.admin === true || decoded.role === 'admin') return decoded;
@@ -139,8 +145,23 @@ export default async function handler(request) {
   if (request.method !== 'POST') return json(405, { error: 'POST 요청만 지원합니다.', code: 'METHOD_NOT_ALLOWED' }, origin);
 
   try {
-    await requireAdmin(request);
     const input = await request.json();
+    if (input.action === 'sign-participant-upload') {
+      const user = await requireFirebaseUser(request);
+      const bytes = Number(input.size || 0);
+      if (input.contentType !== 'image/jpeg' || !Number.isFinite(bytes) || bytes <= 0 || bytes >= MAX_PARTICIPANT_IMAGE_BYTES) {
+        throw Object.assign(new Error('8MB 미만 JPEG 사진만 업로드할 수 있습니다.'), { status: 400, code: 'INVALID_PARTICIPANT_IMAGE' });
+      }
+      const sessionId = safePart(input.sessionId, 'session');
+      const participantId = safePart(user.sub, 'participant');
+      const assetId = safePart(input.assetId, 'grape');
+      const key = `sessions/${sessionId}/grape/${participantId}/${assetId}/photo.jpg`;
+      const cacheControl = 'public,max-age=31536000,immutable';
+      const command = new PutObjectCommand({ Bucket: required('R2_BUCKET_NAME'), Key: key, ContentType: 'image/jpeg', CacheControl: cacheControl });
+      const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 300 });
+      return json(200, { uploadUrl, publicUrl: publicUrl(key), key, headers: { 'content-type': 'image/jpeg', 'cache-control': cacheControl } }, origin);
+    }
+    await requireAdmin(request);
     if (input.action === 'health') {
       ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_PUBLIC_BASE_URL'].forEach(required);
       return json(200, { ok: true, provider: 'cloudflare-r2', publicBaseUrl: process.env.R2_PUBLIC_BASE_URL }, origin);

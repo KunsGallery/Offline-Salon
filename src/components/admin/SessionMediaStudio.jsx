@@ -116,7 +116,6 @@ function ArtworkStudio({ session, activeQuestion }) {
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [nfcCopiedId, setNfcCopiedId] = useState('');
   const artworks = useMemo(() => (session.artworks || []).map((item) => ({ ...item, ...(secrets[item.id] || {}) })), [secrets, session.artworks]);
   const activeId = session.stage?.mode === 'image' || session.stage?.mode === 'artwork' ? session.stage.artworkId : null;
   const legacyArtworkActive = session.stage?.mode === 'artwork';
@@ -182,12 +181,6 @@ function ArtworkStudio({ session, activeQuestion }) {
     await realtime.createArtwork(session.id, { id, imageUrl: artwork.imageUrl, storagePath: artwork.storagePath, displayTitle, order: artworks.length }, { title: displayTitle, artist: artwork.artist || '', description: artwork.description || '' });
   };
   const reorder = (artwork, direction) => realtime.reorderArtworks(session.id, moveId(artworks, artwork.id, direction));
-  const exhibitionNfcUrl = (artworkId) => `${window.location.origin}/client/${session.id}?exhibition=${encodeURIComponent(artworkId)}`;
-  const copyNfcUrl = async (artworkId) => {
-    await navigator.clipboard.writeText(exhibitionNfcUrl(artworkId));
-    setNfcCopiedId(artworkId);
-    window.setTimeout(() => setNfcCopiedId(''), 1800);
-  };
   const importFromSession = async () => {
     const sourceId = window.prompt('작품을 가져올 세션 ID를 입력하세요.');
     if (!sourceId?.trim() || sourceId.trim() === session.id) return;
@@ -225,7 +218,6 @@ function ArtworkStudio({ session, activeQuestion }) {
       <div className="asset-order"><button disabled={index === 0} onClick={() => reorder(artwork, -1)}>←</button><button disabled={index === artworks.length - 1} onClick={() => reorder(artwork, 1)}>→</button><button onClick={() => edit(artwork)}>수정</button><button onClick={() => duplicate(artwork)}>복제</button></div>
       <div className="row gap-sm"><button className="btn primary" onClick={() => start(artwork)} disabled={busy}>화면에 띄우기</button><button className="btn danger" onClick={() => remove(artwork)}>삭제</button></div></div>
     </article>)}</div>
-    {artworks.length ? <section className="exhibition-nfc-links"><header><div><strong>NFC 카드 주소</strong><span>카드에 아래 주소를 URL 레코드로 기록하면 iPhone과 Android에서 바로 해당 전시가 열립니다.</span></div><button className="btn primary" type="button" disabled={busy} onClick={() => realtime.updateSession(session.id, { currentQuestionId: null, stage: { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false }, status: 'live' })}>전시 포도 시작</button></header><div>{artworks.map((artwork) => <article key={artwork.id}><img src={artwork.imageUrl} alt="" /><div><strong>{artwork.displayTitle || artwork.title || '이름 없는 전시'}</strong><code>{exhibitionNfcUrl(artwork.id)}</code></div><button type="button" onClick={() => copyNfcUrl(artwork.id)}>{nfcCopiedId === artwork.id ? '복사됨' : '주소 복사'}</button></article>)}</div></section> : null}
     <form className="media-upload-form" onSubmit={save}>
       <label className={`media-dropzone ${preview ? 'has-preview' : ''}`}>{preview ? <img src={preview} alt="이미지 미리보기" /> : <><strong>갤러리 이미지 선택</strong><span>12MB 미만</span></>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={choose} /></label>
       <div className="stack gap-sm"><h3>{editingId ? '이미지 정보 수정' : '새 이미지 등록'}</h3><input className="input" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="이미지 이름 (필수)" /><input className="input" value={form.artist} onChange={(event) => setForm({ ...form, artist: event.target.value })} placeholder="작성자·출처 (선택)" /><textarea className="textarea" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="이미지 설명" />{progress ? <progress className="upload-progress" value={progress} max="100" /> : null}{error || secretError ? <p className="error-text">{error || messageOf(secretError)}</p> : null}<div className="row gap-sm"><button className="btn primary" disabled={(!editingId && !file) || busy}>{busy ? progress ? `R2 업로드 ${progress}%` : '저장 중…' : editingId ? '수정 저장' : '이미지 등록'}</button>{editingId ? <button className="btn" type="button" onClick={(clickEvent) => resetForm(clickEvent.currentTarget.closest('form'))}>취소</button> : null}</div></div>
