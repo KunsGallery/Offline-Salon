@@ -58,6 +58,22 @@ test('new sessions enable only the activity modules selected for that gathering'
   expect(enabledModules).toEqual(['exhibition-grape']);
 });
 
+test('exhibition grape sessions replace gallery images with an NFC exhibition builder', async ({ page }) => {
+  await page.locator('.session-module-picker label').filter({ hasText: '전시 포도' }).locator('input').check();
+  await expect(page.locator('.media-tabs').getByRole('button', { name: /전시 NFC/ })).toBeVisible();
+  await expect(page.locator('.media-tabs').getByRole('button', { name: /갤러리 이미지/ })).toHaveCount(0);
+  await page.locator('.media-tabs').getByRole('button', { name: /전시 NFC/ }).click();
+  await page.getByPlaceholder('예: 마르크 샤갈 특별전').fill('빛이 머무는 자리');
+  await page.getByPlaceholder('예: 예술의전당 한가람미술관').fill('아트 스페이스');
+  await page.getByRole('button', { name: '전시 NFC 추가' }).click();
+  await expect(page.locator('.exhibition-nfc-list article')).toHaveCount(1);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.exhibitionNfcEntries[0]);
+  expect(stored).toMatchObject({ title: '빛이 머무는 자리', venue: '아트 스페이스' });
+  const url = new URL(await page.locator('.exhibition-nfc-list article code').textContent());
+  expect(url.searchParams.get('title')).toBe('빛이 머무는 자리');
+  expect(url.searchParams.get('venue')).toBe('아트 스페이스');
+});
+
 test('poster palette is saved and applied to the session theme', async ({ page }) => {
   const before = await page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'));
   await page.locator('.poster-zone input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: await imageBuffer(page) });

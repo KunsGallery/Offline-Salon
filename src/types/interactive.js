@@ -42,6 +42,7 @@
  * @property {string} description
  * @property {'offline-salon-core'} platform
  * @property {Array<'exhibition-grape'>} enabledModules
+ * @property {Array<{id: string, title: string, venue: string, createdAt: string, updatedAt: string}>} exhibitionNfcEntries
  * @property {SessionStatus} status
  * @property {string|null} currentQuestionId
  * @property {boolean} showResults

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import SalonAvatar from '../participants/SalonAvatar';
 import { realtime } from '../../lib/realtime';
+import { buildExhibitionNfcUrl } from '../../lib/exhibitionNfc';
 
 const GRAPE_POSITIONS = [
   [50, 9], [36, 18], [64, 18], [25, 30], [50, 31], [75, 30], [17, 43], [39, 44], [61, 44], [83, 43],
@@ -164,7 +165,7 @@ function HostEmptyState() { return <section className="grape-host-empty"><div><L
 export function ExhibitionGrapeRemotePanel({ session, participants = [], busy = false, run }) {
   const activeParticipants = participants.filter((participant) => grapeSelectionList(participant).length);
   const show = (view, participantId = null) => run(() => realtimeStage(session, view, participantId));
-  const addUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/client/${session.id}?add=1&nfc=1`;
+  const addUrl = typeof window === 'undefined' ? '' : buildExhibitionNfcUrl(session.id, {}, window.location.origin);
   const copyUrl = async () => { try { await navigator.clipboard.writeText(addUrl); } catch { window.prompt('이 주소를 복사해 NFC 카드에 기록하세요.', addUrl); } };
   return <section className="remote-assets grape-remote-panel"><div><p className="eyebrow">SEPTEMBER ACTIVITY</p><h2>전시 포도 화면</h2><p>참여자가 직접 사진과 정보를 등록합니다.</p></div><div className="grape-remote-main"><button type="button" disabled={busy} onClick={() => show('live')}>실시간 전시 카운터</button><button type="button" disabled={busy || !activeParticipants.length} onClick={() => show('collective')}>전체 포도밭</button></div><button className="grape-nfc-copy" type="button" onClick={copyUrl}><NfcMark /><span><strong>공용 NFC 주소 복사</strong><small>태그하면 빈 전시 등록 화면이 열립니다.</small></span></button><div className="grape-remote-people">{activeParticipants.map((participant) => <button type="button" disabled={busy} key={participant.participantId} onClick={() => show('person', participant.participantId)}><SalonAvatar avatar={participant.avatar} compact /><span><strong>{participant.nickname || '익명'}</strong><small>{grapeSelectionList(participant).length}개의 전시</small></span></button>)}</div></section>;
 }

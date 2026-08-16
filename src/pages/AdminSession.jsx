@@ -10,6 +10,7 @@ import SessionMediaStudio from '../components/admin/SessionMediaStudio';
 import AdminLiveConsole from '../components/admin/AdminLiveConsole';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { formatDateTime } from '../lib/format';
+import { hasSessionModule } from '../lib/sessionModules';
 import QRJoinCard from '../components/host/QRJoinCard';
 import { realtime } from '../lib/realtime';
 import { useParticipants } from '../hooks/useParticipants';
@@ -162,7 +163,7 @@ export default function AdminSession() {
         <button className={section === 'access' ? 'active' : ''} onClick={() => setSection('access')}><span>04</span>접속·QR</button>
       </nav>
 
-      {section === 'setup' ? <section className="admin-workspace stack gap-lg"><div className="setup-summary"><div><span>갤러리 이미지</span><strong>{session.artworks?.length || 0}</strong></div><div><span>PDF</span><strong>{session.decks?.length || 0}</strong></div><div><span>참여 활동</span><strong>{questions.filter((item) => !item.internal).length}</strong></div><div><span>마지막 저장</span><strong>{formatDateTime(session.updatedAt)}</strong></div></div><SessionEditor session={session} /><SessionMediaStudio session={session} questions={questions} /></section> : null}
+      {section === 'setup' ? <section className="admin-workspace stack gap-lg"><div className="setup-summary"><div><span>{hasSessionModule(session, 'exhibition-grape') ? '전시 NFC' : '갤러리 이미지'}</span><strong>{hasSessionModule(session, 'exhibition-grape') ? session.exhibitionNfcEntries?.length || 0 : session.artworks?.length || 0}</strong></div><div><span>PDF</span><strong>{session.decks?.length || 0}</strong></div><div><span>참여 활동</span><strong>{questions.filter((item) => !item.internal).length}</strong></div><div><span>마지막 저장</span><strong>{formatDateTime(session.updatedAt)}</strong></div></div><SessionEditor session={session} /><SessionMediaStudio session={session} questions={questions} /></section> : null}
 
       {section === 'live' ? <section className="admin-workspace stack gap-lg"><AdminLiveConsole session={session} questions={questions} activeQuestion={activeQuestion} responses={responses} allResponses={allResponses} participants={participants} hostUrl={hostUrl} /><section className="question-workspace"><div className="stack gap-lg"><div className="row between align-center"><div><p className="eyebrow">CORE ACTIVITIES</p><h2>질문·참여 활동</h2><p className="muted">질문마다 좋아요 투표와 결과 갤러리 포함 여부를 선택할 수 있습니다.</p></div><button className="btn primary" onClick={() => setEditingQuestion(null)}>새 활동</button></div><QuestionList session={session} questions={questions.filter((question) => !question.internal)} activeQuestionId={session.currentQuestionId} onSelectQuestion={setEditingQuestion} /></div><QuestionEditor session={session} question={editingQuestion} /></section></section> : <AdminLiveConsole session={session} questions={questions} activeQuestion={activeQuestion} responses={responses} allResponses={allResponses} participants={participants} hostUrl={hostUrl} showPanel={false} />}
 

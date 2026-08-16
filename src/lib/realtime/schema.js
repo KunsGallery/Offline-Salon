@@ -1,6 +1,7 @@
 import { createId } from '../ids';
 import { clampPdfZoom } from '../pdfView';
 import { normalizeSessionModules } from '../sessionModules';
+import { normalizeExhibitionNfcEntries } from '../exhibitionNfc';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -43,6 +44,7 @@ export function cloneSession(session) {
     branding: { ...(session.branding || {}) },
     stage: { ...(session.stage || {}) },
     enabledModules: [...(session.enabledModules || [])],
+    exhibitionNfcEntries: (session.exhibitionNfcEntries || []).map((entry) => ({ ...entry })),
     artworks: (session.artworks || []).map(cloneAsset),
     artworkSecrets: Object.fromEntries(
       Object.entries(session.artworkSecrets || {}).map(([id, value]) => [id, { ...value }]),
@@ -164,6 +166,7 @@ export function normalizeSession(session) {
     description: session.description || '실시간 인터랙티브 세션',
     platform: session.platform || 'offline-salon-core',
     enabledModules: normalizeSessionModules(session.enabledModules),
+    exhibitionNfcEntries: normalizeExhibitionNfcEntries(session.exhibitionNfcEntries),
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
     showResults: Boolean(session.showResults),
@@ -296,6 +299,7 @@ export function createSessionTemplate(input = {}) {
     description: input.description || '실시간 인터랙티브 세션',
     platform: 'offline-salon-core',
     enabledModules: normalizeSessionModules(input.enabledModules),
+    exhibitionNfcEntries: [],
     status: input.status || 'draft',
     currentQuestionId: null,
     showResults: false,
