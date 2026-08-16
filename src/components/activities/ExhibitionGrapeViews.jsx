@@ -68,11 +68,15 @@ function GrapeBunch({ participant, compact = false, emptySlots = true, onSelect 
 
 function NfcMark() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M9 7v10M12 9.5v5M15 7v10M18 4v16" /></svg>; }
 
-function decodeNfcEntry(event) {
+function decodeNfcEntry(event, entries = []) {
   for (const record of event.message?.records || []) {
     try {
       const value = new TextDecoder(record.encoding || 'utf-8').decode(record.data);
       const url = new URL(value, window.location.href);
+      const entryId = url.searchParams.get('n') || '';
+      const entry = entries.find((item) => item.id === entryId);
+      if (entry) return { title: entry.title, venue: entry.venue || '', source: 'nfc' };
+      if (entryId) return { title: '', venue: '', source: 'nfc', missing: true };
       if (url.searchParams.get('add') === '1' || url.searchParams.get('title')) return { title: url.searchParams.get('title') || '', venue: url.searchParams.get('venue') || '', source: 'nfc' };
     } catch { /* Ignore records that are not Offline Salon URLs. */ }
   }
@@ -81,7 +85,7 @@ function decodeNfcEntry(event) {
 
 const emptyDraft = { id: '', title: '', venue: '', rating: 7, status: 'expecting', source: 'participant', photoFile: null, photoUrl: '' };
 
-export function ExhibitionGrapeParticipantView({ participant, entryRequest = {}, onSaveSelection }) {
+export function ExhibitionGrapeParticipantView({ session, participant, entryRequest = {}, onSaveSelection }) {
   const galleryInput = useRef(null);
   const cameraInput = useRef(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -102,7 +106,11 @@ export function ExhibitionGrapeParticipantView({ participant, entryRequest = {},
     if (!selection) return;
     setDraft({ ...emptyDraft, ...selection }); setPreview(selection.photoUrl); setMessage(''); setEditing(true);
   };
-  useEffect(() => { if (entryRequest.open) openNew(entryRequest); }, [entryRequest.open, entryRequest.title, entryRequest.venue]);
+  useEffect(() => {
+    if (!entryRequest.open) return;
+    openNew(entryRequest);
+    if (entryRequest.missing) setMessage('이 카드에 연결된 전시 정보를 찾지 못했습니다. 전시 이름을 직접 입력해 주세요.');
+  }, [entryRequest.open, entryRequest.missing, entryRequest.title, entryRequest.venue]);
   useEffect(() => () => { if (preview.startsWith('blob:')) URL.revokeObjectURL(preview); }, [preview]);
 
   const choosePhoto = (event) => {
@@ -125,7 +133,12 @@ export function ExhibitionGrapeParticipantView({ participant, entryRequest = {},
     if (!('NDEFReader' in window)) { setMessage('카드를 휴대폰에 태그하면 등록 화면이 자동으로 열려요.'); return; }
     try {
       const reader = new window.NDEFReader(); await reader.scan();
-      reader.onreading = (event) => { const entry = decodeNfcEntry(event); if (entry) openNew(entry); else setMessage('Offline Salon 전시 카드가 아닙니다.'); };
+      reader.onreading = (event) => {
+        const entry = decodeNfcEntry(event, session?.exhibitionNfcEntries || []);
+        if (!entry) { setMessage('Offline Salon 전시 카드가 아닙니다.'); return; }
+        openNew(entry);
+        if (entry.missing) setMessage('이 카드에 연결된 전시 정보를 찾지 못했습니다. 전시 이름을 직접 입력해 주세요.');
+      };
       reader.onreadingerror = () => setMessage('카드를 읽지 못했습니다. 휴대폰 뒷면에 다시 가까이 대주세요.');
       setScanning(true); setMessage('준비됐어요. 전시 카드를 휴대폰 뒷면에 대주세요.');
     } catch (error) { setMessage(error?.name === 'NotAllowedError' ? 'NFC 사용 권한을 허용해 주세요.' : 'NFC를 시작하지 못했습니다. 카드 링크로 다시 시도해 주세요.'); }

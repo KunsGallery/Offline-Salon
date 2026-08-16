@@ -1,9 +1,23 @@
 export function buildExhibitionNfcUrl(sessionId, entry = {}, origin = '') {
   const base = String(origin || '').replace(/\/$/, '');
-  const params = new URLSearchParams({ add: '1', nfc: '1' });
-  if (entry.title?.trim()) params.set('title', entry.title.trim());
-  if (entry.venue?.trim()) params.set('venue', entry.venue.trim());
+  const entryId = String(entry.id || '').trim();
+  const params = entryId
+    ? new URLSearchParams({ n: entryId })
+    : new URLSearchParams({ add: '1', nfc: '1' });
+  // Keep supporting old/manual links that contain their prefill data directly.
+  if (!entryId && entry.title?.trim()) params.set('title', entry.title.trim());
+  if (!entryId && entry.venue?.trim()) params.set('venue', entry.venue.trim());
   return `${base}/client/${encodeURIComponent(sessionId)}?${params.toString()}`;
+}
+
+export function createExhibitionNfcId(existingEntries = []) {
+  const existingIds = new Set(existingEntries.map((entry) => String(entry?.id || '')));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const seed = globalThis.crypto?.randomUUID?.().replaceAll('-', '') || Math.random().toString(36).slice(2);
+    const id = seed.slice(0, 8);
+    if (id.length >= 6 && !existingIds.has(id)) return id;
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.slice(-8);
 }
 
 export function exhibitionNfcUrlBytes(url) {

@@ -70,8 +70,9 @@ test('exhibition grape sessions replace gallery images with an NFC exhibition bu
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.exhibitionNfcEntries[0]);
   expect(stored).toMatchObject({ title: '빛이 머무는 자리', venue: '아트 스페이스' });
   const url = new URL(await page.locator('.exhibition-nfc-list article code').textContent());
-  expect(url.searchParams.get('title')).toBe('빛이 머무는 자리');
-  expect(url.searchParams.get('venue')).toBe('아트 스페이스');
+  expect(url.searchParams.get('n')).toBe(stored.id);
+  expect(url.searchParams.has('title')).toBe(false);
+  expect(new TextEncoder().encode(url.toString()).length).toBeLessThanOrEqual(120);
 });
 
 test('poster palette is saved and applied to the session theme', async ({ page }) => {

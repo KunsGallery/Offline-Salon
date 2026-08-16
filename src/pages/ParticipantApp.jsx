@@ -68,13 +68,16 @@ export default function ParticipantApp() {
   const participant = participants.find((item) => item.participantId === participantId) || null;
   const grapeEntryRequest = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
+    const nfcEntryId = params.get('n') || '';
+    const nfcEntry = (session?.exhibitionNfcEntries || []).find((entry) => entry.id === nfcEntryId);
     return {
-      open: params.get('add') === '1' || Boolean(params.get('title')),
-      title: params.get('title') || '',
-      venue: params.get('venue') || '',
-      source: params.get('nfc') === '1' ? 'nfc' : 'participant',
+      open: nfcEntryId ? Boolean(session) : params.get('add') === '1' || Boolean(params.get('title')),
+      title: nfcEntry?.title || params.get('title') || '',
+      venue: nfcEntry?.venue || params.get('venue') || '',
+      source: nfcEntryId || params.get('nfc') === '1' ? 'nfc' : 'participant',
+      missing: Boolean(session && nfcEntryId && !nfcEntry),
     };
-  }, []);
+  }, [session]);
 
   const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
   const myResponse = useMemo(
@@ -287,7 +290,7 @@ export default function ParticipantApp() {
     );
   }
 
-  if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
+  if ((session.stage?.mode === 'exhibition-grape' || grapeEntryRequest.open) && hasSessionModule(session, 'exhibition-grape')) {
     return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} entryRequest={grapeEntryRequest} onSaveSelection={handleSaveGrapeSelection} /></div>;
   }
 

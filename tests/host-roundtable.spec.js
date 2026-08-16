@@ -235,7 +235,8 @@ test('participant creates an exhibition grape from their own photo and updates h
   const session = state.sessions.session_roundtable;
   session.currentQuestionId = null;
   session.enabledModules = ['exhibition-grape'];
-  session.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
+  session.exhibitionNfcEntries = [{ id: 'light001', title: '빛이 머무는 자리', venue: '아트 스페이스', createdAt: '2026-08-03T09:00:00.000Z', updatedAt: '2026-08-03T09:00:00.000Z' }];
+  session.stage = { mode: 'questions', page: 1, blackout: false };
   session.artworks = [];
   session.participants = {
     guest_1: { participantId: 'guest_1', nickname: '민지', avatar: { shape: 'round', color: 'berry' }, grapeSelections: {}, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:10:00.000Z' },
@@ -247,20 +248,27 @@ test('participant creates an exhibition grape from their own photo and updates h
   }, { key: STORAGE_KEY, value: state });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/client/session_roundtable?add=1&nfc=1');
+  await page.goto('/client/session_roundtable?n=light001');
   await expect(page.locator('.grape-entry-editor')).toContainText('내 전시 한 알 만들기');
+  await expect(page.getByPlaceholder('예: 마르크 샤갈 특별전')).toHaveValue('빛이 머무는 자리');
+  await expect(page.getByPlaceholder('예: 예술의전당 한가람미술관')).toHaveValue('아트 스페이스');
   await page.locator('.grape-photo-picker input').first().setInputFiles({
     name: 'visit.svg',
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><rect width="300" height="420" fill="#6d3478"/></svg>'),
   });
-  await page.getByPlaceholder('예: 마르크 샤갈 특별전').fill('빛이 머무는 자리');
-  await page.getByPlaceholder('예: 예술의전당 한가람미술관').fill('아트 스페이스');
   await page.getByRole('button', { name: '보고 왔어요' }).click();
   await page.locator('.grape-rating-range input').fill('9');
   await page.getByRole('button', { name: '내 포도에 한 알 추가' }).click();
   await expect(page.locator('.exhibition-grape.filled')).toHaveCount(1);
   await expect(page.locator('.exhibition-grape.filled')).toHaveAttribute('aria-label', /9점/);
+
+  await page.evaluate((key) => {
+    const state = JSON.parse(localStorage.getItem(key));
+    state.sessions.session_roundtable.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
+    localStorage.setItem(key, JSON.stringify(state));
+    window.dispatchEvent(new StorageEvent('storage', { key }));
+  }, STORAGE_KEY);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.evaluate(() => {
