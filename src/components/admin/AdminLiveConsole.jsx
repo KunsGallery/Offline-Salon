@@ -3,6 +3,7 @@ import { realtime } from '../../lib/realtime';
 import { useArtworkSecrets } from '../../hooks/useArtworkSecrets';
 import { PdfPageCanvas, PdfZoomSelect } from '../media/LiveMediaViews';
 import { buildResultGallery } from '../../lib/resultGallery';
+import { hasSessionModule } from '../../lib/sessionModules';
 
 function stageName(stage) {
   if (stage?.mode === 'pdf') return 'PDF 발표';
@@ -27,6 +28,7 @@ export default function AdminLiveConsole({ session, questions = [], activeQuesti
   const visibleResponses = useMemo(() => responses.filter((item) => item.hidden !== true), [responses]);
   const galleryData = useMemo(() => buildResultGallery(session, questions, allResponses, participants), [allResponses, participants, questions, session]);
   const galleryReady = galleryData.mediaItems.length > 0 || galleryData.resultCount > 0;
+  const grapeEnabled = hasSessionModule(session, 'exhibition-grape');
 
   const run = async (action) => {
     if (busy) return;
@@ -59,7 +61,7 @@ export default function AdminLiveConsole({ session, questions = [], activeQuesti
 
       <article className="panel live-operation-card">
         <header><p className="eyebrow">LIVE OPERATIONS</p><h2>진행 컨트롤</h2><p className="muted">앞 화면에 즉시 반영됩니다.</p></header>
-        <div className="operation-block"><span>화면 모드</span><button className="btn" disabled={busy} onClick={() => run(showLobby)}>대기방</button><button className="btn" disabled={busy} onClick={() => run(showGrapeActivity)}>전시 포도 시작</button><button className="btn" disabled={busy || !galleryReady} title={galleryReady ? '' : '갤러리에 포함된 결과나 이미지가 없습니다.'} onClick={() => run(showGallery)}>결과 갤러리 ({galleryData.resultCount + galleryData.mediaItems.length})</button><button className={`btn ${stage.blackout ? 'primary' : ''}`} disabled={busy} onClick={() => run(() => setView({ blackout: !stage.blackout }))}>{stage.blackout ? '화면 다시 표시' : '화면 잠시 가리기'}</button></div>
+        <div className="operation-block"><span>화면 모드</span><button className="btn" disabled={busy} onClick={() => run(showLobby)}>대기방</button>{grapeEnabled ? <button className="btn" disabled={busy} onClick={() => run(showGrapeActivity)}>전시 포도 시작</button> : null}<button className="btn" disabled={busy || !galleryReady} title={galleryReady ? '' : '갤러리에 포함된 결과나 이미지가 없습니다.'} onClick={() => run(showGallery)}>결과 갤러리 ({galleryData.resultCount + galleryData.mediaItems.length})</button><button className={`btn ${stage.blackout ? 'primary' : ''}`} disabled={busy} onClick={() => run(() => setView({ blackout: !stage.blackout }))}>{stage.blackout ? '화면 다시 표시' : '화면 잠시 가리기'}</button></div>
         {stage.mode === 'artwork' && artwork ? <div className="operation-block"><span>작품 활동</span><button className="btn" disabled={busy} onClick={() => run(() => phase('collect'))}>1. 제목 받기</button><button className="btn primary" disabled={busy} onClick={() => run(() => phase('vote'))}>2. 투표 열기</button><button className="btn" disabled={busy} onClick={() => run(() => phase('reveal'))}>원제 참고</button></div> : null}
         {stage.mode === 'artwork' && artwork && visibleResponses.length ? <div className="caption-adoption"><div><strong>최종 작품명 채택</strong><span>좋아요 순위를 참고해 제목 하나를 선택하세요.</span></div>{[...visibleResponses].sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0)).map((response) => <button className={artwork.adoptedResponseId === response.id ? 'selected' : ''} disabled={busy} key={response.id} onClick={() => run(() => adoptTitle(response))}><span>{Array.isArray(response.value) ? response.value.join(' ') : response.value}</span><b>♥ {response.likes || 0}</b><em>{artwork.adoptedResponseId === response.id ? '채택됨' : '채택'}</em></button>)}</div> : null}
         {stage.mode === 'pdf' && deck ? <><div className="operation-block"><span>페이지</span><button className="btn" disabled={busy || page <= 1} onClick={() => run(() => setPage(page - 1))}>← 이전</button><label><input type="number" min="1" max={deck.pageCount} value={page} onChange={(event) => run(() => setPage(Number(event.target.value)))} /> / {deck.pageCount}</label><button className="btn primary" disabled={busy || page >= deck.pageCount} onClick={() => run(() => setPage(page + 1))}>다음 →</button></div><div className="operation-block"><span>보기</span><button className={`btn ${stage.fitMode !== 'width' ? 'primary' : ''}`} onClick={() => run(() => setView({ fitMode: 'fit' }))}>화면 맞춤</button><button className={`btn ${stage.fitMode === 'width' ? 'primary' : ''}`} onClick={() => run(() => setView({ fitMode: 'width' }))}>너비 맞춤</button><PdfZoomSelect value={stage.zoom} onChange={(nextZoom) => run(() => setView({ zoom: nextZoom }))} /></div>{pageLinks.length ? <div className="operation-links"><span>현재 페이지 링크</span>{pageLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label || link.url} ↗</a>)}</div> : null}</> : null}

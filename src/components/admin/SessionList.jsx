@@ -4,10 +4,12 @@ import { formatDateTime } from '../../lib/format';
 import { buildBranding, extractPalette } from '../../lib/colorPalette';
 import { createId } from '../../lib/ids';
 import { removeMedia, removeSessionMedia, uploadMedia } from '../../lib/media';
+import { SESSION_MODULES } from '../../lib/sessionModules';
 
 export default function SessionList({ sessions, onOpen }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [enabledModules, setEnabledModules] = useState([]);
   const [poster, setPoster] = useState(null);
   const [palette, setPalette] = useState([]);
   const [creating, setCreating] = useState(false);
@@ -23,7 +25,7 @@ export default function SessionList({ sessions, onOpen }) {
     let createdSession = null;
     let uploadedPoster = null;
     try {
-      const next = await Promise.resolve(realtime.createSession({ title: title.trim() || '새 세션', description: description.trim() || '실시간 인터랙티브 세션' }));
+      const next = await Promise.resolve(realtime.createSession({ title: title.trim() || '새 세션', description: description.trim() || '실시간 인터랙티브 세션', enabledModules }));
       createdSession = next;
       if (poster && palette.length) {
         const id = createId('poster');
@@ -31,7 +33,7 @@ export default function SessionList({ sessions, onOpen }) {
         uploadedPoster = await uploadMedia(next.id, 'poster', id, poster, `poster.${extension}`);
         await realtime.updateSession(next.id, { branding: { ...next.branding, ...buildBranding(palette), posterUrl: uploadedPoster.url, posterStoragePath: uploadedPoster.path } });
       }
-      setTitle(''); setDescription(''); setPoster(null); setPalette([]); onOpen(next.id);
+      setTitle(''); setDescription(''); setEnabledModules([]); setPoster(null); setPalette([]); onOpen(next.id);
     } catch (reason) {
       await removeMedia(uploadedPoster?.path).catch(() => undefined);
       if (createdSession?.id) await Promise.resolve(realtime.deleteSession(createdSession.id)).catch(() => undefined);
@@ -92,6 +94,7 @@ export default function SessionList({ sessions, onOpen }) {
           </label>
           <label className="field session-poster-field"><span>모임 포스터 (선택)</span><input className="input" type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePoster} /><small>{poster ? `${poster.name} · 대표색 ${palette.length}개 추출` : '포스터를 넣으면 세션 컬러를 자동 생성합니다.'}</small></label>
           {palette.length ? <div className="palette-row"><span>자동 팔레트</span><div>{palette.map((color) => <i key={color} style={{ background: color }} />)}</div></div> : null}
+          <fieldset className="session-module-picker"><legend>이번 모임에 추가할 기능</legend><p>기본 기능은 항상 포함됩니다. 필요한 활동만 선택하세요.</p>{SESSION_MODULES.map((module) => <label key={module.id}><input type="checkbox" checked={enabledModules.includes(module.id)} onChange={(event) => setEnabledModules((current) => event.target.checked ? [...current, module.id] : current.filter((id) => id !== module.id))} /><span><strong>{module.title}</strong><small>{module.description}</small></span></label>)}</fieldset>
           {error ? <p className="error-text">{error}</p> : null}
           <button className="btn primary" type="submit" disabled={creating}>
             {creating ? '세션 준비 중…' : '새 세션 만들기'}

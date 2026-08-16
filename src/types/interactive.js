@@ -41,6 +41,7 @@
  * @property {string} title
  * @property {string} description
  * @property {'offline-salon-core'} platform
+ * @property {Array<'exhibition-grape'>} enabledModules
  * @property {SessionStatus} status
  * @property {string|null} currentQuestionId
  * @property {boolean} showResults

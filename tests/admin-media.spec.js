@@ -45,6 +45,19 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/admin/session_demo');
 });
 
+test('new sessions enable only the activity modules selected for that gathering', async ({ page }) => {
+  await page.goto('/admin');
+  await page.getByPlaceholder('예: UNFRAME 6월 살롱').fill('9월 전시 모임');
+  await page.locator('.session-module-picker label').filter({ hasText: '전시 포도' }).locator('input').check();
+  await page.getByRole('button', { name: '새 세션 만들기' }).click();
+  await expect(page).toHaveURL(/\/admin\/session_/);
+  const enabledModules = await page.evaluate(() => {
+    const sessionId = window.location.pathname.split('/').pop();
+    return JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions[sessionId].enabledModules;
+  });
+  expect(enabledModules).toEqual(['exhibition-grape']);
+});
+
 test('poster palette is saved and applied to the session theme', async ({ page }) => {
   const before = await page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'));
   await page.locator('.poster-zone input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: await imageBuffer(page) });
@@ -172,6 +185,7 @@ test('admin sections and mobile remote have no horizontal overflow', async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/remote/session_demo');
   await expect(page.getByText('연결됨')).toBeVisible();
+  await expect(page.locator('.grape-remote-panel')).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });

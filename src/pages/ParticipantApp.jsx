@@ -17,6 +17,7 @@ import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeParticipantView } from '../components/activities/ExhibitionGrapeViews';
 import { uploadParticipantPhoto } from '../lib/media';
 import { prepareParticipantPhoto } from '../lib/participantPhoto';
+import { hasSessionModule } from '../lib/sessionModules';
 
 function storageKey(sessionId, key) {
   return `offline-salon:${key}:${sessionId}`;
@@ -286,7 +287,7 @@ export default function ParticipantApp() {
     );
   }
 
-  if (session.stage?.mode === 'exhibition-grape') {
+  if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
     return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} entryRequest={grapeEntryRequest} onSaveSelection={handleSaveGrapeSelection} /></div>;
   }
 

@@ -1,10 +1,18 @@
 import React from 'react';
 import { realtime } from '../../lib/realtime';
+import { SESSION_MODULES } from '../../lib/sessionModules';
 
 export default function SessionEditor({ session }) {
   if (!session) return null;
 
   const patch = (next) => realtime.updateSession(session.id, next);
+  const toggleModule = (moduleId, enabled) => {
+    const enabledModules = enabled
+      ? [...new Set([...(session.enabledModules || []), moduleId])]
+      : (session.enabledModules || []).filter((id) => id !== moduleId);
+    const stage = !enabled && session.stage?.mode === moduleId ? { mode: 'lobby', page: 1, blackout: false } : session.stage;
+    return patch({ enabledModules, ...(stage !== session.stage ? { currentQuestionId: null, stage } : {}) });
+  };
 
   return (
     <section className="panel">
@@ -16,6 +24,7 @@ export default function SessionEditor({ session }) {
       </div>
 
       <div className="form-grid">
+        <fieldset className="session-module-picker form-grid-wide"><legend>선택 활동 모듈</legend><p>Core 기능은 항상 유지됩니다. 이 세션에서 사용할 활동만 켜세요.</p>{SESSION_MODULES.map((module) => <label key={module.id}><input type="checkbox" checked={(session.enabledModules || []).includes(module.id)} onChange={(event) => toggleModule(module.id, event.target.checked)} /><span><strong>{module.title}</strong><small>{module.description}</small></span></label>)}</fieldset>
         <label className="field">
           <span>제목</span>
           <input className="input" value={session.title} onChange={(event) => patch({ title: event.target.value })} />

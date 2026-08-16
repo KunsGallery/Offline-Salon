@@ -234,6 +234,7 @@ test('participant creates an exhibition grape from their own photo and updates h
   const state = roundtableState(0);
   const session = state.sessions.session_roundtable;
   session.currentQuestionId = null;
+  session.enabledModules = ['exhibition-grape'];
   session.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
   session.artworks = [];
   session.participants = {

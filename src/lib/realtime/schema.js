@@ -1,5 +1,6 @@
 import { createId } from '../ids';
 import { clampPdfZoom } from '../pdfView';
+import { normalizeSessionModules } from '../sessionModules';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -41,6 +42,7 @@ export function cloneSession(session) {
     ...session,
     branding: { ...(session.branding || {}) },
     stage: { ...(session.stage || {}) },
+    enabledModules: [...(session.enabledModules || [])],
     artworks: (session.artworks || []).map(cloneAsset),
     artworkSecrets: Object.fromEntries(
       Object.entries(session.artworkSecrets || {}).map(([id, value]) => [id, { ...value }]),
@@ -161,6 +163,7 @@ export function normalizeSession(session) {
     title: session.title || '새 세션',
     description: session.description || '실시간 인터랙티브 세션',
     platform: session.platform || 'offline-salon-core',
+    enabledModules: normalizeSessionModules(session.enabledModules),
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
     showResults: Boolean(session.showResults),
@@ -292,6 +295,7 @@ export function createSessionTemplate(input = {}) {
     title: input.title || '새 세션',
     description: input.description || '실시간 인터랙티브 세션',
     platform: 'offline-salon-core',
+    enabledModules: normalizeSessionModules(input.enabledModules),
     status: input.status || 'draft',
     currentQuestionId: null,
     showResults: false,

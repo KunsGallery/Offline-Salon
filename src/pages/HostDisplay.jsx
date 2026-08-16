@@ -11,6 +11,7 @@ import { useSession } from '../hooks/useSession';
 import { ArtworkHostView, ImageHostView, PdfHostView, ResultGalleryHostView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeHostView } from '../components/activities/ExhibitionGrapeViews';
+import { hasSessionModule } from '../lib/sessionModules';
 
 export default function HostDisplay() {
   const { sessionId } = useParams();
@@ -124,7 +125,7 @@ export default function HostDisplay() {
     return <div style={sessionThemeStyle(session)}><ResultGalleryHostView session={session} questions={questions} responses={galleryResponses} participants={participants} /></div>;
   }
 
-  if (session.stage?.mode === 'exhibition-grape') {
+  if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
     return <div style={sessionThemeStyle(session)}><ExhibitionGrapeHostView session={session} participants={participants} /></div>;
   }
 
