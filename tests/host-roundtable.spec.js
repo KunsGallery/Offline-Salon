@@ -249,7 +249,9 @@ test('participant creates an exhibition grape from their own photo and updates h
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/client/session_roundtable?n=light001');
-  await expect(page.locator('.grape-entry-editor')).toContainText('내 전시 한 알 만들기');
+  await expect(page.locator('.grape-entry-editor')).toContainText('사진과 느낌을 더해 주세요');
+  await expect(page.locator('.grape-nfc-confirmation')).toContainText('전시 카드를 인식했어요');
+  await expect(page.locator('.grape-builder-stage')).toHaveCount(0);
   await expect(page.getByPlaceholder('예: 마르크 샤갈 특별전')).toHaveValue('빛이 머무는 자리');
   await expect(page.getByPlaceholder('예: 예술의전당 한가람미술관')).toHaveValue('아트 스페이스');
   await page.locator('.grape-photo-picker input').first().setInputFiles({

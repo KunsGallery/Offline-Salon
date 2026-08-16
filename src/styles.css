@@ -3221,6 +3221,14 @@ button {
 .grape-add-primary { min-height: 48px; margin-top: 14px; padding: 0 20px; border: 1px solid #d9bc67; border-radius: 999px; color: #211923; background: #e5ce79; font-size: .72rem; font-weight: 850; }
 .grape-add-primary:disabled { opacity: .4; }
 .grape-entry-editor { max-width: 620px; display: grid; gap: 14px; margin: 28px auto 0; padding: 16px; overflow: hidden; border-radius: 16px; background: #fff; }
+.nfc-entry-focus { padding-top: max(22px, env(safe-area-inset-top)); }
+.nfc-entry-focus .grape-entry-editor { margin-top: 12px; }
+.grape-nfc-confirmation { max-width: 620px; display: grid; grid-template-columns: 46px minmax(0,1fr); align-items: center; gap: 14px; margin: 0 auto; padding: 18px; border-radius: 16px; color: #f9f4eb; background: #4d2357; }
+.grape-nfc-confirmation svg { width: 38px; fill: none; stroke: #eed76f; stroke-linecap: round; stroke-width: 1.5; }
+.grape-nfc-confirmation div { min-width: 0; }
+.grape-nfc-confirmation strong { display: block; font-size: 1rem; line-height: 1.35; }
+.grape-nfc-confirmation p { margin-top: 5px; color: #e7dce5; font-size: .76rem; line-height: 1.55; overflow-wrap: anywhere; }
+.grape-nfc-confirmation p b { color: #fff; }
 .grape-entry-editor > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .grape-entry-editor > header h2 { margin-top: 3px; font-size: 1.15rem; }
 .grape-entry-editor > header button { width: 44px; height: 44px; border: 0; border-radius: 10px; color: #665a64; background: #f0ebef; font-size: .64rem; }

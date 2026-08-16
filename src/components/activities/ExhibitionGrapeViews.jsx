@@ -96,6 +96,7 @@ export function ExhibitionGrapeParticipantView({ session, participant, entryRequ
   const [scanning, setScanning] = useState(false);
   const selections = grapeSelectionList(participant);
   const metric = GRAPE_STATUSES.find((item) => item.id === draft.status)?.metric || '기대감';
+  const focusedNfcEntry = editing && draft.source === 'nfc' && !draft.id;
 
   const openNew = (prefill = {}) => {
     setDraft({ ...emptyDraft, title: prefill.title || '', venue: prefill.venue || '', source: prefill.source || 'participant' });
@@ -144,13 +145,15 @@ export function ExhibitionGrapeParticipantView({ session, participant, entryRequ
     } catch (error) { setMessage(error?.name === 'NotAllowedError' ? 'NFC 사용 권한을 허용해 주세요.' : 'NFC를 시작하지 못했습니다. 카드 링크로 다시 시도해 주세요.'); }
   };
 
-  return <main className="grape-participant-view">
-    <header className="grape-participant-header"><div><h1>{participant?.nickname || '나'}의<br />전시 포도</h1><p>내가 찍은 사진으로 보고 싶은 전시와 다녀온 전시를 기록해요.</p></div><strong><span>{selections.length}</span> / {GRAPE_POSITIONS.length}</strong></header>
-    <section className="grape-builder-stage"><GrapeBunch participant={participant} onSelect={openExisting} /><p>{selections.length ? '포도알을 누르면 사진과 느낌을 다시 기록할 수 있어요.' : '아직 포도알이 비어 있어요. 첫 전시 사진으로 시작해 보세요.'}</p><button className="grape-add-primary" type="button" disabled={selections.length >= GRAPE_POSITIONS.length} onClick={() => openNew()}>＋ 사진으로 전시 추가</button></section>
-    <section className="grape-nfc-strip"><NfcMark /><div><strong>{scanning ? 'NFC 스캔 중' : '전시 카드가 있다면'}</strong><span>태그하면 전시 이름이 채워진 등록 화면이 열려요. 사진은 내가 고릅니다.</span></div>{'NDEFReader' in window ? <button type="button" onClick={startNfc}>{scanning ? '스캔 중' : '스캔'}</button> : null}</section>
+  return <main className={`grape-participant-view ${focusedNfcEntry ? 'nfc-entry-focus' : ''}`}>
+    {focusedNfcEntry ? <section className="grape-nfc-confirmation" aria-live="polite"><NfcMark /><div><strong>전시 카드를 인식했어요</strong><p>{entryRequest.missing ? '연결된 전시 정보가 없어 직접 입력이 필요합니다.' : <><b>“{draft.title}”</b> 정보를 불러왔습니다.<br />이제 내 사진을 골라 포도알을 완성해 주세요.</>}</p></div></section> : <>
+      <header className="grape-participant-header"><div><h1>{participant?.nickname || '나'}의<br />전시 포도</h1><p>내가 찍은 사진으로 보고 싶은 전시와 다녀온 전시를 기록해요.</p></div><strong><span>{selections.length}</span> / {GRAPE_POSITIONS.length}</strong></header>
+      <section className="grape-builder-stage"><GrapeBunch participant={participant} onSelect={openExisting} /><p>{selections.length ? '포도알을 누르면 사진과 느낌을 다시 기록할 수 있어요.' : '아직 포도알이 비어 있어요. 첫 전시 사진으로 시작해 보세요.'}</p><button className="grape-add-primary" type="button" disabled={selections.length >= GRAPE_POSITIONS.length} onClick={() => openNew()}>＋ 사진으로 전시 추가</button></section>
+      <section className="grape-nfc-strip"><NfcMark /><div><strong>{scanning ? 'NFC 스캔 중' : '전시 카드가 있다면'}</strong><span>태그하면 전시 이름이 채워진 등록 화면이 열려요. 사진은 내가 고릅니다.</span></div>{'NDEFReader' in window ? <button type="button" onClick={startNfc}>{scanning ? '스캔 중' : '스캔'}</button> : null}</section>
+    </>}
     {message ? <p className="grape-inline-message" role="status">{message}</p> : null}
     {editing ? <section className="grape-entry-editor">
-      <header><div><p className="eyebrow">NEW GRAPE</p><h2>{draft.id ? '포도알 다시 기록하기' : '내 전시 한 알 만들기'}</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="전시 등록 닫기">닫기</button></header>
+      <header><div><p className="eyebrow">NEW GRAPE</p><h2>{draft.id ? '포도알 다시 기록하기' : focusedNfcEntry ? '사진과 느낌을 더해 주세요' : '내 전시 한 알 만들기'}</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="전시 등록 닫기">{focusedNfcEntry ? '돌아가기' : '닫기'}</button></header>
       <div className={`grape-photo-picker ${preview ? 'has-photo' : ''}`}>{preview ? <img src={preview} alt="선택한 전시 사진 미리보기" /> : <div><strong>전시에서 찍은 사진</strong><span>포스터뿐 아니라 공간, 작품, 티켓 사진도 좋아요.</span></div>}<div><button type="button" onClick={() => galleryInput.current?.click()}>갤러리에서 선택</button><button type="button" onClick={() => cameraInput.current?.click()}>지금 촬영</button></div><input ref={galleryInput} type="file" accept="image/*" onChange={choosePhoto} /><input ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={choosePhoto} /></div>
       <label className="grape-entry-field"><span>전시 이름 <b>필수</b></span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="예: 마르크 샤갈 특별전" /></label>
       <label className="grape-entry-field"><span>장소 <small>선택</small></span><input value={draft.venue} onChange={(event) => setDraft({ ...draft, venue: event.target.value })} placeholder="예: 예술의전당 한가람미술관" /></label>
