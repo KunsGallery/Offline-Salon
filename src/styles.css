@@ -1035,6 +1035,7 @@ button {
 .checkin-result > :not(.checkin-celebration) { position: relative; z-index: 1; }
 .checkin-result span { color: rgba(255,255,255,.48); font: 850 .7rem var(--mono-font); letter-spacing: .14em; }
 .checkin-result h2 { color: #fff; font-size: clamp(1.8rem,3vw,3.2rem); line-height: 1.02; }
+.checkin-result.already h2 { font-size: clamp(1.65rem,2.7vw,2.8rem); line-height: 1.04; letter-spacing: -.025em; word-break: keep-all; }
 .checkin-result p { color: rgba(255,255,255,.68); line-height: 1.5; overflow-wrap: anywhere; }
 .checkin-result.success { background: linear-gradient(135deg,#115e43,#7b6420); }
 .checkin-result.already { background: linear-gradient(135deg,#263b73,#5a3e78); }
