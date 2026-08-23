@@ -17,13 +17,6 @@ provider.setCustomParameters({
   prompt: 'select_account',
 });
 
-function prefersRedirectLogin() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
-  return /iPad|iPhone|iPod/.test(ua) || isTouchMac;
-}
-
 export function hasFirebaseAuth() {
   return Boolean(auth);
 }
@@ -58,10 +51,6 @@ export function subscribeAuthState(callback, onError) {
 export async function loginWithGoogle() {
   if (!auth) {
     throw new Error(authUnavailableMessage);
-  }
-
-  if (prefersRedirectLogin()) {
-    return signInWithRedirect(auth, provider);
   }
 
   try {
