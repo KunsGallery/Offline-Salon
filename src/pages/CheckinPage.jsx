@@ -52,6 +52,11 @@ async function playCheckinSound(audioContext, status) {
   playTone(audioContext, 165, now + 0.16, 0.22, 0.032, 'triangle');
 }
 
+const cameraFacingLabels = {
+  environment: '후면카메라',
+  user: '전면카메라',
+};
+
 export default function CheckinPage() {
   const { sessionId } = useParams();
   const videoRef = useRef(null);
@@ -67,6 +72,10 @@ export default function CheckinPage() {
   const [scannerMessage, setScannerMessage] = useState('');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState(() => {
+    if (typeof window === 'undefined') return 'environment';
+    return window.localStorage.getItem('offline-salon:checkin-camera-facing') || 'environment';
+  });
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem('offline-salon:checkin-sound') !== 'off';
@@ -120,18 +129,19 @@ export default function CheckinPage() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (preferredFacing = cameraFacing) => {
     try {
       await prepareAudio();
       setScannerState('starting');
       stopCamera();
       setScannerState('scanning');
-      setScannerMessage('카메라 중앙에 개인 QR을 맞춰 주세요.');
+      setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'}로 스캔합니다. 개인 QR을 화면 중앙에 맞춰 주세요.`);
+      const videoConstraints = { facingMode: { ideal: preferredFacing } };
       if (!('BarcodeDetector' in window)) {
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
         const reader = new BrowserMultiFormatReader();
         const controls = await reader.decodeFromConstraints(
-          { video: { facingMode: 'environment' }, audio: false },
+          { video: videoConstraints, audio: false },
           videoRef.current,
           (scanResult) => {
             const rawValue = scanResult?.getText?.() || '';
@@ -142,11 +152,11 @@ export default function CheckinPage() {
           },
         );
         zxingControlsRef.current = controls;
-        setScannerMessage('이 브라우저는 보조 스캐너로 QR을 읽고 있습니다. QR을 화면 중앙에 맞춰 주세요.');
+        setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'} · 보조 스캐너로 QR을 읽고 있습니다. QR을 화면 중앙에 맞춰 주세요.`);
         return;
       }
       detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
@@ -168,6 +178,17 @@ export default function CheckinPage() {
     } catch (reason) {
       setScannerState('manual');
       setScannerMessage(reason?.name === 'NotAllowedError' ? '카메라 권한이 필요합니다. 권한을 허용하거나 수동 입력을 사용해 주세요.' : `카메라 스캔을 시작하지 못했습니다. 수동 입력을 사용해 주세요.${reason?.message ? ` (${reason.message})` : ''}`);
+    }
+  };
+
+  const switchCamera = async () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(nextFacing);
+    window.localStorage.setItem('offline-salon:checkin-camera-facing', nextFacing);
+    if (scannerState === 'scanning' || scannerState === 'starting') {
+      await startCamera(nextFacing);
+    } else {
+      setScannerMessage(`${cameraFacingLabels[nextFacing]}로 설정했습니다. 카메라 스캔 시작을 누르면 적용됩니다.`);
     }
   };
 
@@ -199,7 +220,7 @@ export default function CheckinPage() {
           <video ref={videoRef} muted playsInline />
           <div><strong>{scannerState === 'scanning' ? '스캔 중' : 'QR 스캐너'}</strong><span>{scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
         </div>
-        <div className="checkin-actions"><button type="button" onClick={startCamera} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : '카메라 스캔 시작'}</button><button type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
+        <div className="checkin-actions"><button type="button" onClick={() => startCamera()} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : `${cameraFacingLabels[cameraFacing]} 스캔 시작`}</button><button className="checkin-secondary-action" type="button" onClick={switchCamera} disabled={scannerState === 'starting'}>{cameraFacing === 'environment' ? '전면으로 전환' : '후면으로 전환'}</button><button className="checkin-secondary-action" type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
         <form className="checkin-manual" onSubmit={(event) => { event.preventDefault(); checkin(manualValue); }}>
           <label><span>수동 체크인</span><input value={manualValue} onChange={(event) => setManualValue(event.target.value)} placeholder="QR URL, applicationId, token" /></label>
           <small>{parsed.token || parsed.applicationId ? `인식 후보: ${parsed.applicationId || parsed.token}` : 'Join 패스 링크나 체크인 QR 값을 붙여넣어도 됩니다.'}</small>
