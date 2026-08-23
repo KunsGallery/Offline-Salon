@@ -235,8 +235,7 @@ test('participant creates an exhibition grape from their own photo and updates h
   const session = state.sessions.session_roundtable;
   session.currentQuestionId = null;
   session.enabledModules = ['exhibition-grape'];
-  session.exhibitionNfcEntries = [{ id: 'light001', title: '빛이 머무는 자리', venue: '아트 스페이스', createdAt: '2026-08-03T09:00:00.000Z', updatedAt: '2026-08-03T09:00:00.000Z' }];
-  session.stage = { mode: 'questions', page: 1, blackout: false };
+  session.stage = { mode: 'exhibition-grape', view: 'live', page: 1, blackout: false };
   session.artworks = [];
   session.participants = {
     guest_1: { participantId: 'guest_1', nickname: '민지', avatar: { shape: 'round', color: 'berry' }, grapeSelections: {}, joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:10:00.000Z' },
@@ -248,12 +247,11 @@ test('participant creates an exhibition grape from their own photo and updates h
   }, { key: STORAGE_KEY, value: state });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/client/session_roundtable?n=light001');
-  await expect(page.locator('.grape-entry-editor')).toContainText('사진과 느낌을 더해 주세요');
-  await expect(page.locator('.grape-nfc-confirmation')).toContainText('전시 카드를 인식했어요');
-  await expect(page.locator('.grape-builder-stage')).toHaveCount(0);
-  await expect(page.getByPlaceholder('예: 마르크 샤갈 특별전')).toHaveValue('빛이 머무는 자리');
-  await expect(page.getByPlaceholder('예: 예술의전당 한가람미술관')).toHaveValue('아트 스페이스');
+  await page.goto('/client/session_roundtable');
+  await page.getByRole('button', { name: '＋ 직접 전시 추가' }).click();
+  await expect(page.locator('.grape-entry-editor')).toContainText('내 전시 한 알 만들기');
+  await page.getByPlaceholder('예: 마르크 샤갈 특별전').fill('빛이 머무는 자리');
+  await page.getByPlaceholder('예: 예술의전당 한가람미술관').fill('아트 스페이스');
   await page.locator('.grape-photo-picker input').first().setInputFiles({
     name: 'visit.svg',
     mimeType: 'image/svg+xml',

@@ -32,7 +32,7 @@
  * @typedef {Object} InteractiveParticipant
  * @property {string} participantId
  * @property {string|null} nickname
- * @property {Record<string, {id: string, title: string, venue: string, photoUrl: string, photoPath: string|null, status: 'want'|'expecting'|'seen', rating: number, source: 'participant'|'nfc', createdAt: string, updatedAt: string}>} grapeSelections
+ * @property {Record<string, {id: string, title: string, venue: string, photoUrl: string, photoPath: string|null, status: 'want'|'expecting'|'seen', rating: number, referenceId: string, region: string, monthTags: number[], artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], source: 'participant'|'reference', createdAt: string, updatedAt: string}>} grapeSelections
  * @property {string} joinedAt
  * @property {string} lastSeenAt
  *
@@ -42,7 +42,7 @@
  * @property {string} description
  * @property {'offline-salon-core'} platform
  * @property {Array<'exhibition-grape'>} enabledModules
- * @property {Array<{id: string, title: string, venue: string, createdAt: string, updatedAt: string}>} exhibitionNfcEntries
+ * @property {Array<{id: string, title: string, venue: string, region: string, startDate: string, endDate: string, artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], createdAt: string, updatedAt: string}>} exhibitionReferences
  * @property {SessionStatus} status
  * @property {string|null} currentQuestionId
  * @property {boolean} showResults

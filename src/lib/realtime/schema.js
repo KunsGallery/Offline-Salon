@@ -1,7 +1,7 @@
 import { createId } from '../ids';
 import { clampPdfZoom } from '../pdfView';
 import { normalizeSessionModules } from '../sessionModules';
-import { normalizeExhibitionNfcEntries } from '../exhibitionNfc';
+import { normalizeSessionExhibitionReferences } from '../exhibitionCatalog';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -44,7 +44,7 @@ export function cloneSession(session) {
     branding: { ...(session.branding || {}) },
     stage: { ...(session.stage || {}) },
     enabledModules: [...(session.enabledModules || [])],
-    exhibitionNfcEntries: (session.exhibitionNfcEntries || []).map((entry) => ({ ...entry })),
+    exhibitionReferences: (session.exhibitionReferences || []).map((entry) => ({ ...entry })),
     artworks: (session.artworks || []).map(cloneAsset),
     artworkSecrets: Object.fromEntries(
       Object.entries(session.artworkSecrets || {}).map(([id, value]) => [id, { ...value }]),
@@ -148,7 +148,15 @@ export function normalizeParticipant(participantId, participant) {
         photoPath: selection?.photoPath || null,
         rating: Math.min(10, Math.max(1, Number(selection?.rating || 1))),
         status: ['want', 'expecting', 'seen'].includes(selection?.status) ? selection.status : 'expecting',
-        source: selection?.source === 'nfc' ? 'nfc' : 'participant',
+        referenceId: String(selection?.referenceId || '').trim(),
+        region: String(selection?.region || '').trim(),
+        district: String(selection?.district || '').trim(),
+        area: String(selection?.area || '').trim(),
+        monthTags: Array.isArray(selection?.monthTags) ? selection.monthTags.map(Number).filter(Boolean) : [],
+        artistOrigin: ['domestic', 'international', 'mixed'].includes(selection?.artistOrigin) ? selection.artistOrigin : 'mixed',
+        categoryTags: Array.isArray(selection?.categoryTags) ? selection.categoryTags.map(String).filter(Boolean) : [],
+        sourceUrl: String(selection?.sourceUrl || '').trim(),
+        source: selection?.referenceId || selection?.source === 'reference' ? 'reference' : 'participant',
         createdAt: selection?.createdAt || nowIso(),
         updatedAt: selection?.updatedAt || selection?.createdAt || nowIso(),
       }]))
@@ -166,7 +174,7 @@ export function normalizeSession(session) {
     description: session.description || '실시간 인터랙티브 세션',
     platform: session.platform || 'offline-salon-core',
     enabledModules: normalizeSessionModules(session.enabledModules),
-    exhibitionNfcEntries: normalizeExhibitionNfcEntries(session.exhibitionNfcEntries),
+    exhibitionReferences: normalizeSessionExhibitionReferences(session.exhibitionReferences),
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
     showResults: Boolean(session.showResults),
@@ -299,7 +307,7 @@ export function createSessionTemplate(input = {}) {
     description: input.description || '실시간 인터랙티브 세션',
     platform: 'offline-salon-core',
     enabledModules: normalizeSessionModules(input.enabledModules),
-    exhibitionNfcEntries: [],
+    exhibitionReferences: [],
     status: input.status || 'draft',
     currentQuestionId: null,
     showResults: false,

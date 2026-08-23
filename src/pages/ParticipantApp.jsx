@@ -66,18 +66,6 @@ export default function ParticipantApp() {
   const { responses: galleryResponses, error: galleryResponsesError } = useAllResponses(sessionId, session?.stage?.mode === 'gallery');
   const { participants, loading: participantsLoading, error: participantsError } = useParticipants(sessionId);
   const participant = participants.find((item) => item.participantId === participantId) || null;
-  const grapeEntryRequest = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    const nfcEntryId = params.get('n') || '';
-    const nfcEntry = (session?.exhibitionNfcEntries || []).find((entry) => entry.id === nfcEntryId);
-    return {
-      open: nfcEntryId ? Boolean(session) : params.get('add') === '1' || Boolean(params.get('title')),
-      title: nfcEntry?.title || params.get('title') || '',
-      venue: nfcEntry?.venue || params.get('venue') || '',
-      source: nfcEntryId || params.get('nfc') === '1' ? 'nfc' : 'participant',
-      missing: Boolean(session && nfcEntryId && !nfcEntry),
-    };
-  }, [session]);
 
   const visibleResponses = useMemo(() => responses.filter((response) => response.hidden !== true), [responses]);
   const myResponse = useMemo(
@@ -274,7 +262,15 @@ export default function ParticipantApp() {
         photoPath,
         rating: selection.rating,
         status: selection.status,
-        source: selection.source === 'nfc' ? 'nfc' : 'participant',
+        referenceId: selection.referenceId || '',
+        region: selection.region || '',
+        district: selection.district || '',
+        area: selection.area || '',
+        monthTags: Array.isArray(selection.monthTags) ? selection.monthTags : [],
+        artistOrigin: selection.artistOrigin || 'mixed',
+        categoryTags: Array.isArray(selection.categoryTags) ? selection.categoryTags : [],
+        sourceUrl: selection.sourceUrl || '',
+        source: selection.referenceId ? 'reference' : 'participant',
         createdAt: previous?.createdAt || now,
         updatedAt: now,
       },
@@ -290,8 +286,8 @@ export default function ParticipantApp() {
     );
   }
 
-  if ((session.stage?.mode === 'exhibition-grape' || grapeEntryRequest.open) && hasSessionModule(session, 'exhibition-grape')) {
-    return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} entryRequest={grapeEntryRequest} onSaveSelection={handleSaveGrapeSelection} /></div>;
+  if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
+    return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} onSaveSelection={handleSaveGrapeSelection} /></div>;
   }
 
   if (session.stage?.mode === 'pdf') {

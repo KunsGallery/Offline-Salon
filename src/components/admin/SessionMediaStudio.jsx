@@ -8,7 +8,7 @@ import { realtime } from '../../lib/realtime';
 import { useArtworkSecrets } from '../../hooks/useArtworkSecrets';
 import { PdfPageCanvas, PdfZoomSelect } from '../media/LiveMediaViews';
 import { hasSessionModule } from '../../lib/sessionModules';
-import { buildExhibitionNfcUrl, createExhibitionNfcId, exhibitionNfcUrlBytes } from '../../lib/exhibitionNfc';
+import { formatDateRange, formatMonthTags, ORIGIN_LABELS, resolveExhibitionReferences } from '../../lib/exhibitionCatalog';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const emptyArtworkForm = { title: '', artist: '', description: '' };
@@ -227,52 +227,61 @@ function ArtworkStudio({ session, activeQuestion }) {
   </section>;
 }
 
-function ExhibitionNfcStudio({ session }) {
-  const [form, setForm] = useState({ title: '', venue: '' });
+function ExhibitionReferenceStudio({ session }) {
+  const [form, setForm] = useState({ title: '', venue: '', region: '', artistOrigin: 'mixed', startDate: '', endDate: '', categoryTags: '' });
   const [editingId, setEditingId] = useState('');
-  const [draftId, setDraftId] = useState(() => createExhibitionNfcId(session.exhibitionNfcEntries || []));
-  const [copiedId, setCopiedId] = useState('');
   const [error, setError] = useState('');
-  const entries = session.exhibitionNfcEntries || [];
-  const previewUrl = buildExhibitionNfcUrl(session.id, { ...form, id: editingId || draftId }, window.location.origin);
-  const byteLength = exhibitionNfcUrlBytes(previewUrl);
-  const genericUrl = buildExhibitionNfcUrl(session.id, {}, window.location.origin);
+  const references = resolveExhibitionReferences(session);
+  const customEntries = session.exhibitionReferences || [];
 
-  const copy = async (value, id) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedId(id); setError('');
-      window.setTimeout(() => setCopiedId(''), 1600);
-    } catch {
-      window.prompt('아래 주소를 복사하세요.', value);
-    }
-  };
   const save = async (event) => {
     event.preventDefault();
     const title = form.title.trim();
     if (!title) { setError('전시 이름을 입력해 주세요.'); return; }
     const now = new Date().toISOString();
-    const id = editingId || draftId;
-    const previous = entries.find((entry) => entry.id === id);
-    const nextEntry = { id, title, venue: form.venue.trim(), createdAt: previous?.createdAt || now, updatedAt: now };
-    const nextEntries = editingId ? entries.map((entry) => entry.id === id ? nextEntry : entry) : [...entries, nextEntry];
-    await realtime.updateSession(session.id, { exhibitionNfcEntries: nextEntries });
-    setForm({ title: '', venue: '' }); setEditingId(''); setDraftId(createExhibitionNfcId(nextEntries)); setError('');
+    const id = editingId || createId('exhibition-ref');
+    const previous = customEntries.find((entry) => entry.id === id);
+    const nextEntry = {
+      id,
+      title,
+      venue: form.venue.trim(),
+      region: form.region.trim() || '직접 등록',
+      artistOrigin: form.artistOrigin,
+      startDate: form.startDate,
+      endDate: form.endDate,
+      categoryTags: form.categoryTags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      custom: true,
+      createdAt: previous?.createdAt || now,
+      updatedAt: now,
+    };
+    const nextEntries = editingId ? customEntries.map((entry) => entry.id === id ? nextEntry : entry) : [...customEntries, nextEntry];
+    await realtime.updateSession(session.id, { exhibitionReferences: nextEntries });
+    setForm({ title: '', venue: '', region: '', artistOrigin: 'mixed', startDate: '', endDate: '', categoryTags: '' }); setEditingId(''); setError('');
   };
-  const edit = (entry) => { setForm({ title: entry.title, venue: entry.venue || '' }); setEditingId(entry.id); setError(''); };
+  const edit = (entry) => { setForm({ title: entry.title, venue: entry.venue || '', region: entry.region || '', artistOrigin: entry.artistOrigin || 'mixed', startDate: entry.startDate || '', endDate: entry.endDate || '', categoryTags: (entry.categoryTags || []).join(', ') }); setEditingId(entry.id); setError(''); };
   const remove = async (entry) => {
-    if (!window.confirm(`“${entry.title}” NFC 정보를 삭제할까요? 연결된 카드는 빈 등록 화면으로 열립니다.`)) return;
-    await realtime.updateSession(session.id, { exhibitionNfcEntries: entries.filter((item) => item.id !== entry.id) });
-    if (editingId === entry.id) { setEditingId(''); setForm({ title: '', venue: '' }); setDraftId(createExhibitionNfcId(entries.filter((item) => item.id !== entry.id))); }
+    if (!entry.custom) return;
+    if (!window.confirm(`“${entry.title}” 참고 전시를 삭제할까요?`)) return;
+    await realtime.updateSession(session.id, { exhibitionReferences: customEntries.filter((item) => item.id !== entry.id) });
+    if (editingId === entry.id) { setEditingId(''); setForm({ title: '', venue: '', region: '', artistOrigin: 'mixed', startDate: '', endDate: '', categoryTags: '' }); }
   };
 
-  return <section className="exhibition-nfc-studio">
-    <header><div><h3>전시 정보를 카드 주소로 만들기</h3><p>전시명과 장소만 카드에 연결합니다. 태그한 참여자는 자기 휴대폰에서 사진과 만족도를 추가합니다.</p></div><button className="btn" type="button" onClick={() => copy(genericUrl, 'generic')}>{copiedId === 'generic' ? '복사됨' : '빈 등록 카드 주소'}</button></header>
-    <div className="exhibition-nfc-workspace">
-      <form onSubmit={save}><label className="field"><span>전시 이름</span><input className="input" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="예: 마르크 샤갈 특별전" /></label><label className="field"><span>전시장·장소 <small>선택</small></span><input className="input" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="예: 예술의전당 한가람미술관" /></label><div className="nfc-url-preview"><span>카드에 기록할 짧은 URL</span><code>{previewUrl}</code><small className={byteLength > 120 ? 'warning' : ''}>약 {byteLength} bytes · {byteLength > 120 ? 'NTAG215 이상 권장' : 'NTAG213 권장 범위'}</small></div>{error ? <p className="error-text">{error}</p> : null}<div className="row gap-sm"><button className="btn primary">{editingId ? '전시 정보 수정' : '전시 NFC 추가'}</button><button className="btn" type="button" disabled={!form.title.trim()} onClick={() => copy(previewUrl, 'preview')}>{copiedId === 'preview' ? '복사됨' : '주소 미리 복사'}</button>{editingId ? <button className="btn ghost" type="button" onClick={() => { setEditingId(''); setForm({ title: '', venue: '' }); setDraftId(createExhibitionNfcId(entries)); }}>취소</button> : null}</div></form>
-      <details className="nfc-writing-guide" open><summary>NFC 카드 기록 방법</summary><ol><li>휴대폰에 NFC 쓰기 앱을 설치합니다.</li><li><b>Write → Add a record → URL/URI</b>를 선택합니다.</li><li>생성된 짧은 주소만 붙여넣고 <b>Write</b>를 누른 뒤 카드에 휴대폰을 댑니다.</li><li>앱을 닫고 카드를 다시 태그해 전시명이 채워지는지 확인합니다.</li></ol><p>카드에는 전시명 대신 짧은 식별자만 저장되고, 전시명과 장소는 접속 후 세션에서 불러옵니다. URL이 ‘NTAG213 권장 범위’인지 확인한 뒤 기록하세요. 읽기 전용 잠금은 전체 테스트가 끝난 뒤에만 사용하세요.</p></details>
+  return <section className="exhibition-reference-studio">
+    <header><div><h3>참고 전시 리스트</h3><p>참여자 모바일에서 고를 수 있는 서울 전시 목록입니다. 참여자는 여기서 고르거나 직접 입력하고, 진행자는 지역·월·국내/국외 작가별 선호를 볼 수 있습니다.</p></div><span>{references.length} exhibitions</span></header>
+    <div className="exhibition-reference-workspace">
+      <form onSubmit={save}>
+        <label className="field"><span>전시 이름</span><input className="input" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="예: 마르크 샤갈 특별전" /></label>
+        <label className="field"><span>전시장·장소</span><input className="input" value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="예: 예술의전당 한가람미술관" /></label>
+        <label className="field"><span>지역 분류</span><input className="input" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} placeholder="예: 서초·예술의전당" /></label>
+        <div className="form-grid two"><label className="field"><span>시작일</span><input className="input" type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label><label className="field"><span>종료일</span><input className="input" type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label></div>
+        <label className="field"><span>국내/국외 작가</span><select className="input" value={form.artistOrigin} onChange={(event) => setForm({ ...form, artistOrigin: event.target.value })}>{Object.entries(ORIGIN_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label className="field"><span>태그 <small>쉼표로 구분</small></span><input className="input" value={form.categoryTags} onChange={(event) => setForm({ ...form, categoryTags: event.target.value })} placeholder="회화, 미디어, 설치" /></label>
+        {error ? <p className="error-text">{error}</p> : null}
+        <div className="row gap-sm"><button className="btn primary">{editingId ? '참고 전시 수정' : '직접 전시 추가'}</button>{editingId ? <button className="btn ghost" type="button" onClick={() => { setEditingId(''); setForm({ title: '', venue: '', region: '', artistOrigin: 'mixed', startDate: '', endDate: '', categoryTags: '' }); }}>취소</button> : null}</div>
+      </form>
+      <aside className="exhibition-reference-note"><strong>운영 방식</strong><p>리스트는 참고용입니다. 참여자가 실제로 고른 사진과 기대감/만족도만 Firebase 참여자 데이터에 저장되고, 화면에서는 이 전시의 지역·월·작가 분류로 자동 집계됩니다.</p></aside>
     </div>
-    <div className="exhibition-nfc-list">{entries.length ? entries.map((entry) => { const url = buildExhibitionNfcUrl(session.id, entry, window.location.origin); return <article key={entry.id}><div><strong>{entry.title}</strong><span>{entry.venue || '장소 미입력'}</span><code>{url}</code></div><div><button type="button" onClick={() => copy(url, entry.id)}>{copiedId === entry.id ? '복사됨' : 'URL 복사'}</button><button type="button" onClick={() => edit(entry)}>수정</button><button type="button" onClick={() => remove(entry)}>삭제</button></div></article>; }) : <div className="nfc-empty-state"><h4>아직 준비한 전시 카드가 없습니다.</h4><p>첫 전시명을 입력하면 카드에 기록할 주소가 만들어집니다. 전시 정보를 미리 넣지 않은 공용 카드는 위의 ‘빈 등록 카드 주소’를 사용하세요.</p></div>}</div>
+    <div className="exhibition-reference-list">{references.map((entry) => <article key={entry.id}><div><strong>{entry.title}</strong><span>{entry.venue || '장소 미입력'} · {entry.region} · {formatDateRange(entry)}</span><small>{ORIGIN_LABELS[entry.artistOrigin]} · {formatMonthTags(entry.monthTags)} · {entry.categoryTags?.slice(0, 4).join(' · ')}</small></div><div>{entry.custom ? <><button type="button" onClick={() => edit(entry)}>수정</button><button type="button" onClick={() => remove(entry)}>삭제</button></> : <span>기본 리스트</span>}</div></article>)}</div>
   </section>;
 }
 
@@ -328,6 +337,7 @@ export default function SessionMediaStudio({ session, questions = [] }) {
   const [tab, setTab] = useState('poster');
   const grapeEnabled = hasSessionModule(session, 'exhibition-grape');
   const activeQuestion = questions.find((question) => question.id === session.currentQuestionId) || null;
-  useEffect(() => { if (grapeEnabled && tab === 'artworks') setTab('nfc'); if (!grapeEnabled && tab === 'nfc') setTab('artworks'); }, [grapeEnabled, tab]);
-  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">{grapeEnabled ? 'EXHIBITION GRAPE MODULE' : 'OFFLINE SALON CORE'}</p><h2>세션 준비실</h2><p className="muted">{grapeEnabled ? '포스터 테마, 전시 NFC 카드와 PDF 발표를 준비합니다.' : '포스터, 갤러리 이미지, PDF와 참여 활동을 준비합니다.'}</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button>{grapeEnabled ? <button className={tab === 'nfc' ? 'active' : ''} onClick={() => setTab('nfc')}>전시 NFC <b>{session.exhibitionNfcEntries?.length || 0}</b></button> : <button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>갤러리 이미지 <b>{session.artworks?.length || 0}</b></button>}<button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'nfc' ? <ExhibitionNfcStudio session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} activeQuestion={activeQuestion} /> : <PdfStudio session={session} activeQuestion={activeQuestion} />}</div></section>;
+  useEffect(() => { if (grapeEnabled && tab === 'artworks') setTab('references'); if (!grapeEnabled && tab === 'references') setTab('artworks'); }, [grapeEnabled, tab]);
+  const referenceCount = resolveExhibitionReferences(session).length;
+  return <section className="panel session-media-manager"><header className="media-manager-header"><div><p className="eyebrow">{grapeEnabled ? 'EXHIBITION GRAPE MODULE' : 'OFFLINE SALON CORE'}</p><h2>세션 준비실</h2><p className="muted">{grapeEnabled ? '포스터 테마, 참고 전시 리스트와 PDF 발표를 준비합니다.' : '포스터, 갤러리 이미지, PDF와 참여 활동을 준비합니다.'}</p></div><StorageStatus /></header><nav className="media-tabs" aria-label="세션 자료"><button className={tab === 'poster' ? 'active' : ''} onClick={() => setTab('poster')}>포스터·테마</button>{grapeEnabled ? <button className={tab === 'references' ? 'active' : ''} onClick={() => setTab('references')}>참고 전시 <b>{referenceCount}</b></button> : <button className={tab === 'artworks' ? 'active' : ''} onClick={() => setTab('artworks')}>갤러리 이미지 <b>{session.artworks?.length || 0}</b></button>}<button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>PDF <b>{session.decks?.length || 0}</b></button></nav><div className="media-tab-content">{tab === 'poster' ? <PosterThemeEditor session={session} /> : tab === 'references' ? <ExhibitionReferenceStudio session={session} /> : tab === 'artworks' ? <ArtworkStudio session={session} activeQuestion={activeQuestion} /> : <PdfStudio session={session} activeQuestion={activeQuestion} />}</div></section>;
 }
