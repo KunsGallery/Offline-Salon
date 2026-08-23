@@ -16,6 +16,42 @@ function resultCopy(result) {
   return { tone: 'error', title: 'QR을 확인하지 못했습니다', body: result.message || (result.payload?.raw ? `읽은 값: ${result.payload.raw}` : 'Join 개인 QR 또는 수동 명단 토큰을 확인해 주세요.') };
 }
 
+function createAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  return AudioContext ? new AudioContext() : null;
+}
+
+function playTone(audioContext, frequency, start, duration, gain = 0.04, type = 'sine') {
+  const oscillator = audioContext.createOscillator();
+  const envelope = audioContext.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, start);
+  envelope.gain.setValueAtTime(0.0001, start);
+  envelope.gain.exponentialRampToValueAtTime(gain, start + 0.012);
+  envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(envelope).connect(audioContext.destination);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.02);
+}
+
+async function playCheckinSound(audioContext, status) {
+  if (!audioContext) return;
+  if (audioContext.state === 'suspended') await audioContext.resume();
+  const now = audioContext.currentTime + 0.01;
+  if (status === 'checked-in') {
+    playTone(audioContext, 660, now, 0.11, 0.045);
+    playTone(audioContext, 990, now + 0.11, 0.16, 0.04);
+    return;
+  }
+  if (status === 'already') {
+    playTone(audioContext, 520, now, 0.12, 0.032);
+    playTone(audioContext, 420, now + 0.1, 0.16, 0.028);
+    return;
+  }
+  playTone(audioContext, 220, now, 0.18, 0.035, 'triangle');
+  playTone(audioContext, 165, now + 0.16, 0.22, 0.032, 'triangle');
+}
+
 export default function CheckinPage() {
   const { sessionId } = useParams();
   const videoRef = useRef(null);
@@ -24,12 +60,17 @@ export default function CheckinPage() {
   const streamRef = useRef(null);
   const rafRef = useRef(0);
   const lastCodeRef = useRef('');
+  const audioContextRef = useRef(null);
   const { session, loading, error } = useSession(sessionId);
   const [manualValue, setManualValue] = useState('');
   const [scannerState, setScannerState] = useState('idle');
   const [scannerMessage, setScannerMessage] = useState('');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem('offline-salon:checkin-sound') !== 'off';
+  });
   const applications = useMemo(() => sortCheckinApplications(session?.checkinApplications || []), [session?.checkinApplications]);
   const summary = checkinSummary(applications);
   const recent = applications.filter((item) => item.checkedIn).slice(0, 6);
@@ -38,19 +79,41 @@ export default function CheckinPage() {
     window.cancelAnimationFrame(rafRef.current);
     zxingControlsRef.current?.stop?.();
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    audioContextRef.current?.close?.();
   }, []);
+
+  const prepareAudio = async (force = false) => {
+    if ((!soundEnabled && !force) || typeof window === 'undefined') return null;
+    if (!audioContextRef.current) audioContextRef.current = createAudioContext();
+    if (audioContextRef.current?.state === 'suspended') await audioContextRef.current.resume();
+    return audioContextRef.current;
+  };
+
+  const toggleSound = async () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    window.localStorage.setItem('offline-salon:checkin-sound', next ? 'on' : 'off');
+    if (next) {
+      const audioContext = await prepareAudio(true);
+      await playCheckinSound(audioContext, 'already');
+    }
+  };
 
   const checkin = async (value) => {
     const raw = String(value || '').trim();
     if (!raw || busy) return;
     setBusy(true);
     try {
+      const audioContext = await prepareAudio();
       const user = getCurrentUser();
       const next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
       setResult(next);
+      await playCheckinSound(audioContext, next.status);
       if (next.ok && next.status === 'checked-in') setManualValue('');
     } catch (reason) {
-      setResult({ ok: false, status: 'error', payload: { raw }, message: reason?.message || '체크인에 실패했습니다.' });
+      const failed = { ok: false, status: 'error', payload: { raw }, message: reason?.message || '체크인에 실패했습니다.' };
+      setResult(failed);
+      await playCheckinSound(audioContextRef.current, failed.status);
     } finally {
       setBusy(false);
       window.setTimeout(() => { lastCodeRef.current = ''; }, 1800);
@@ -59,6 +122,7 @@ export default function CheckinPage() {
 
   const startCamera = async () => {
     try {
+      await prepareAudio();
       setScannerState('starting');
       stopCamera();
       setScannerState('scanning');
@@ -135,7 +199,7 @@ export default function CheckinPage() {
           <video ref={videoRef} muted playsInline />
           <div><strong>{scannerState === 'scanning' ? '스캔 중' : 'QR 스캐너'}</strong><span>{scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
         </div>
-        <div className="checkin-actions"><button type="button" onClick={startCamera} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : '카메라 스캔 시작'}</button><button type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button></div>
+        <div className="checkin-actions"><button type="button" onClick={startCamera} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : '카메라 스캔 시작'}</button><button type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
         <form className="checkin-manual" onSubmit={(event) => { event.preventDefault(); checkin(manualValue); }}>
           <label><span>수동 체크인</span><input value={manualValue} onChange={(event) => setManualValue(event.target.value)} placeholder="QR URL, applicationId, token" /></label>
           <small>{parsed.token || parsed.applicationId ? `인식 후보: ${parsed.applicationId || parsed.token}` : 'Join 패스 링크나 체크인 QR 값을 붙여넣어도 됩니다.'}</small>

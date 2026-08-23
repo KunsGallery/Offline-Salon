@@ -1024,6 +1024,7 @@ button {
 .checkin-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .checkin-actions button, .checkin-manual button { min-height: 52px; border: 0; border-radius: 13px; color: #101722; background: var(--accent-2); font-weight: 850; }
 .checkin-actions button:last-child { color: #fff; background: rgba(255,255,255,.12); }
+.checkin-actions .checkin-sound-toggle { grid-column: 1 / -1; min-height: 44px; color: rgba(255,255,255,.78); background: rgba(255,255,255,.09); }
 .checkin-actions button:disabled, .checkin-manual button:disabled { opacity: .42; }
 .checkin-manual { display: grid; gap: 9px; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.07); }
 .checkin-manual label { display: grid; gap: 7px; }
