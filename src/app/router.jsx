@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AdminHome from '../pages/AdminHome';
 import AdminSession from '../pages/AdminSession';
+import CheckinPage from '../pages/CheckinPage';
 import HostDisplay from '../pages/HostDisplay';
 import LoginPage from '../pages/LoginPage';
 import ParticipantApp from '../pages/ParticipantApp';
@@ -32,6 +33,7 @@ export function AppRouter() {
       <Route path="/host/:sessionId" element={<HostDisplay />} />
       <Route path="/client/:sessionId" element={<ParticipantApp />} />
       <Route path="/remote/:sessionId" element={<ProtectedRoute><RemoteControl /></ProtectedRoute>} />
+      <Route path="/checkin/:sessionId" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   );

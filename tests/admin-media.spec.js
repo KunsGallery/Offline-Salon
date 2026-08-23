@@ -73,6 +73,35 @@ test('exhibition grape sessions replace gallery images with an exhibition refere
   expect(stored).toMatchObject({ title: '빛이 머무는 자리', venue: '아트 스페이스', region: '서초·예술의전당' });
 });
 
+test('check-in core adds applicants and validates a personal QR token', async ({ page }) => {
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /입장 체크/ }).click();
+  await expect(page.locator('.checkin-admin-summary')).toContainText('신청');
+  const form = page.locator('.checkin-applicant-form');
+  await form.getByPlaceholder('이름').fill('정하린');
+  await form.getByPlaceholder('이메일').fill('harin@example.com');
+  await form.getByPlaceholder('휴대폰 뒤 4자리').fill('0921');
+  await form.getByPlaceholder('체크인 토큰 · 비우면 자동 생성').fill('SALON-HARIN-0001');
+  await page.getByRole('button', { name: '신청자 추가' }).click();
+  await expect(page.locator('.checkin-applicant-list article').filter({ hasText: '정하린' })).toBeVisible();
+
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.locator('.checkin-hero')).toContainText('UNFRAME Demo Salon');
+  await page.getByPlaceholder('QR URL, applicationId, token').fill('https://join.unframe.kr/pass/SALON-HARIN-0001');
+  await page.getByRole('button', { name: '체크인 처리' }).click();
+  await expect(page.locator('.checkin-result')).toContainText('정하린님 입장 완료');
+
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/admin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await page.locator('.admin-workspace-tabs').getByRole('button', { name: /입장 체크/ }).click();
+  await expect(page.locator('.checkin-admin-summary')).toContainText('입장');
+  await expect(page.locator('.checkin-applicant-list article').filter({ hasText: '정하린' })).toContainText('입장');
+});
+
 test('poster palette is saved and applied to the session theme', async ({ page }) => {
   const before = await page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'));
   await page.locator('.poster-zone input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: await imageBuffer(page) });
@@ -196,7 +225,7 @@ test('admin sections and mobile remote have no horizontal overflow', async ({ pa
     await page.locator('.admin-workspace-tabs').getByRole('button', { name: new RegExp(name) }).click();
     await expect(page.locator('.admin-live-dock')).toBeVisible();
   }
-  await expect(page.locator('.admin-qr-grid .qr-card')).toHaveCount(2);
+  await expect(page.locator('.admin-qr-grid .qr-card')).toHaveCount(3);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/remote/session_demo');
   await expect(page.getByText('연결됨')).toBeVisible();

@@ -16,6 +16,8 @@ import {
   sortByUpdatedDesc,
   nowIso,
 } from './schema';
+import { createCheckinApplicationFromJoinPass, createCheckinToken, findCheckinApplication, normalizeCheckinApplication, parseCheckinPayload } from '../checkin';
+import { lookupJoinSalonPass } from '../joinPass';
 
 const STORAGE_KEY = 'offline-salon:interactive-studio-pro:v1';
 const CHANNEL_NAME = 'offline-salon:interactive-studio-pro';
@@ -184,6 +186,10 @@ function readParticipants(sessionId) {
   return Object.values(session?.participants || {}).sort(sortByLastSeenDesc);
 }
 
+function readCheckinApplications(sessionId) {
+  return readSession(sessionId)?.checkinApplications || [];
+}
+
 function normalizeSessionState(session) {
   const next = sanitizeSession(cloneSession(session));
   state.sessions[next.id] = next;
@@ -286,6 +292,10 @@ const localAdapter = {
     return readParticipants(sessionId);
   },
 
+  getCheckinApplications(sessionId) {
+    return readCheckinApplications(sessionId);
+  },
+
   getArtworkSecrets(sessionId) {
     return { ...(readSession(sessionId)?.artworkSecrets || {}) };
   },
@@ -311,6 +321,80 @@ const localAdapter = {
     const session = updateSessionState(sessionId, patch);
     broadcast(sessionId);
     return session;
+  },
+
+  upsertCheckinApplication(sessionId, input = {}) {
+    const session = ensureSession(sessionId);
+    const now = nowIso();
+    const id = input.id || createId('application');
+    const previous = (session.checkinApplications || []).find((item) => item.id === id);
+    const application = normalizeCheckinApplication({
+      ...previous,
+      ...input,
+      id,
+      checkinToken: input.checkinToken || previous?.checkinToken || createCheckinToken(id),
+      createdAt: previous?.createdAt || now,
+      updatedAt: now,
+    });
+    session.checkinApplications = previous
+      ? session.checkinApplications.map((item) => item.id === id ? application : item)
+      : [...(session.checkinApplications || []), application];
+    session.updatedAt = now;
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return application;
+  },
+
+  deleteCheckinApplication(sessionId, applicationId) {
+    const session = ensureSession(sessionId);
+    session.checkinApplications = (session.checkinApplications || []).filter((item) => item.id !== applicationId);
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
+  async checkInApplication(sessionId, value, checkedInBy = 'admin') {
+    const session = ensureSession(sessionId);
+    const payload = parseCheckinPayload(value);
+    const applications = session.checkinApplications || [];
+    let application = findCheckinApplication(applications, payload);
+    let imported = false;
+    let joinPass = null;
+    if (!application && (payload.isJoinPayload || payload.token?.length >= 32)) {
+      joinPass = await lookupJoinSalonPass(payload.raw || payload.token);
+      application = findCheckinApplication(applications, { ...payload, joinTokenHash: joinPass.tokenHash });
+      if (!application) {
+        application = createCheckinApplicationFromJoinPass(joinPass);
+        if (application) {
+          session.checkinApplications = [...applications, application];
+          imported = true;
+        }
+      }
+    }
+    if (!application) return { ok: false, status: 'not-found', payload };
+    if (application.status === 'cancelled') return { ok: false, status: 'cancelled', application };
+    if (application.checkedIn) return { ok: true, status: 'already', application, imported, joinPass };
+    const now = nowIso();
+    const next = { ...application, checkedIn: true, checkedInAt: now, checkedInBy, updatedAt: now };
+    session.checkinApplications = (session.checkinApplications || []).map((item) => item.id === application.id ? next : item);
+    session.updatedAt = now;
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return { ok: true, status: 'checked-in', application: next, imported, joinPass };
+  },
+
+  undoCheckInApplication(sessionId, applicationId) {
+    const session = ensureSession(sessionId);
+    const applications = session.checkinApplications || [];
+    const application = applications.find((item) => item.id === applicationId);
+    if (!application) return null;
+    const now = nowIso();
+    const next = { ...application, checkedIn: false, checkedInAt: null, checkedInBy: null, updatedAt: now };
+    session.checkinApplications = applications.map((item) => item.id === applicationId ? next : item);
+    session.updatedAt = now;
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return next;
   },
 
   deleteSession(sessionId) {

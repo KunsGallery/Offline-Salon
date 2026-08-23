@@ -17,6 +17,8 @@ import {
 import { createId } from '../ids';
 import { requireAdminUser } from '../auth';
 import { db } from '../firebase';
+import { createCheckinApplicationFromJoinPass, createCheckinToken, findCheckinApplication, normalizeCheckinApplication, parseCheckinPayload } from '../checkin';
+import { lookupJoinSalonPass } from '../joinPass';
 import {
   cloneParticipant,
   cloneAsset,
@@ -70,6 +72,12 @@ function fromSessionDoc(id, data) {
       platform: data.platform || 'offline-salon-core',
       enabledModules: data.enabledModules || [],
       exhibitionReferences: data.exhibitionReferences || [],
+      checkinApplications: (data.checkinApplications || []).map((item) => ({
+        ...item,
+        checkedInAt: item.checkedInAt ? toIso(item.checkedInAt) : null,
+        createdAt: item.createdAt ? toIso(item.createdAt) : null,
+        updatedAt: item.updatedAt ? toIso(item.updatedAt) : null,
+      })),
       status: data.status,
       currentQuestionId: data.currentQuestionId ?? null,
       showResults: data.showResults,
@@ -269,6 +277,10 @@ const firestoreAdapter = {
     return participantCache.get(sessionId) || [];
   },
 
+  getCheckinApplications(sessionId) {
+    return this.getSession(sessionId)?.checkinApplications || [];
+  },
+
   getArtworkSecrets(sessionId) {
     return artworkSecretCache.get(sessionId) || {};
   },
@@ -290,6 +302,7 @@ const firestoreAdapter = {
       platform: 'offline-salon-core',
       enabledModules: Array.isArray(input.enabledModules) ? input.enabledModules : [],
       exhibitionReferences: [],
+      checkinApplications: [],
       status: input.status || 'draft',
       currentQuestionId: null,
       showResults: false,
@@ -320,6 +333,87 @@ const firestoreAdapter = {
       ...patch,
       updatedAt: serverTimestamp(),
     });
+  },
+
+  async upsertCheckinApplication(sessionId, input = {}) {
+    requireAdminWrite();
+    const session = await readSessionDoc(sessionId);
+    if (!session) throw new Error('세션을 찾을 수 없습니다.');
+    const now = new Date().toISOString();
+    const id = input.id || createId('application');
+    const previous = (session.checkinApplications || []).find((item) => item.id === id);
+    const application = normalizeCheckinApplication({
+      ...previous,
+      ...input,
+      id,
+      checkinToken: input.checkinToken || previous?.checkinToken || createCheckinToken(id),
+      createdAt: previous?.createdAt || now,
+      updatedAt: now,
+    });
+    const nextApplications = previous
+      ? session.checkinApplications.map((item) => item.id === id ? application : item)
+      : [...(session.checkinApplications || []), application];
+    await updateDoc(sessionDocRef(sessionId), { checkinApplications: nextApplications, updatedAt: serverTimestamp() });
+    return application;
+  },
+
+  async deleteCheckinApplication(sessionId, applicationId) {
+    requireAdminWrite();
+    const session = await readSessionDoc(sessionId);
+    if (!session) throw new Error('세션을 찾을 수 없습니다.');
+    await updateDoc(sessionDocRef(sessionId), {
+      checkinApplications: (session.checkinApplications || []).filter((item) => item.id !== applicationId),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  async checkInApplication(sessionId, value, checkedInBy = 'admin') {
+    requireAdminWrite();
+    const session = await readSessionDoc(sessionId);
+    if (!session) throw new Error('세션을 찾을 수 없습니다.');
+    const payload = parseCheckinPayload(value);
+    const applications = session.checkinApplications || [];
+    let application = findCheckinApplication(applications, payload);
+    let nextApplications = applications;
+    let imported = false;
+    let joinPass = null;
+    if (!application && (payload.isJoinPayload || payload.token?.length >= 32)) {
+      joinPass = await lookupJoinSalonPass(payload.raw || payload.token);
+      application = findCheckinApplication(applications, { ...payload, joinTokenHash: joinPass.tokenHash });
+      if (!application) {
+        application = createCheckinApplicationFromJoinPass(joinPass);
+        if (application) {
+          nextApplications = [...applications, application];
+          imported = true;
+        }
+      }
+    }
+    if (!application) return { ok: false, status: 'not-found', payload };
+    if (application.status === 'cancelled') return { ok: false, status: 'cancelled', application };
+    if (application.checkedIn) return { ok: true, status: 'already', application, imported, joinPass };
+    const now = new Date().toISOString();
+    const next = { ...application, checkedIn: true, checkedInAt: now, checkedInBy, updatedAt: now };
+    await updateDoc(sessionDocRef(sessionId), {
+      checkinApplications: nextApplications.map((item) => item.id === application.id ? next : item),
+      updatedAt: serverTimestamp(),
+    });
+    return { ok: true, status: 'checked-in', application: next, imported, joinPass };
+  },
+
+  async undoCheckInApplication(sessionId, applicationId) {
+    requireAdminWrite();
+    const session = await readSessionDoc(sessionId);
+    if (!session) throw new Error('세션을 찾을 수 없습니다.');
+    const applications = session.checkinApplications || [];
+    const application = applications.find((item) => item.id === applicationId);
+    if (!application) return null;
+    const now = new Date().toISOString();
+    const next = { ...application, checkedIn: false, checkedInAt: null, checkedInBy: null, updatedAt: now };
+    await updateDoc(sessionDocRef(sessionId), {
+      checkinApplications: applications.map((item) => item.id === applicationId ? next : item),
+      updatedAt: serverTimestamp(),
+    });
+    return next;
   },
 
   async deleteSession(sessionId) {

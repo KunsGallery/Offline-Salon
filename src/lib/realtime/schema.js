@@ -2,6 +2,7 @@ import { createId } from '../ids';
 import { clampPdfZoom } from '../pdfView';
 import { normalizeSessionModules } from '../sessionModules';
 import { normalizeSessionExhibitionReferences } from '../exhibitionCatalog';
+import { normalizeCheckinApplications } from '../checkin';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -45,6 +46,7 @@ export function cloneSession(session) {
     stage: { ...(session.stage || {}) },
     enabledModules: [...(session.enabledModules || [])],
     exhibitionReferences: (session.exhibitionReferences || []).map((entry) => ({ ...entry })),
+    checkinApplications: (session.checkinApplications || []).map((entry) => ({ ...entry })),
     artworks: (session.artworks || []).map(cloneAsset),
     artworkSecrets: Object.fromEntries(
       Object.entries(session.artworkSecrets || {}).map(([id, value]) => [id, { ...value }]),
@@ -175,6 +177,7 @@ export function normalizeSession(session) {
     platform: session.platform || 'offline-salon-core',
     enabledModules: normalizeSessionModules(session.enabledModules),
     exhibitionReferences: normalizeSessionExhibitionReferences(session.exhibitionReferences),
+    checkinApplications: normalizeCheckinApplications(session.checkinApplications),
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
     showResults: Boolean(session.showResults),
@@ -294,6 +297,34 @@ export function createDemoState() {
         ],
         responses: [],
         participants: {},
+        checkinApplications: [
+          {
+            id: 'application_demo_1',
+            name: '김민지',
+            email: 'minji@example.com',
+            phoneLast4: '1209',
+            ticketType: '일반',
+            status: 'approved',
+            checkinToken: 'SALON-DEMO-0001',
+            checkedIn: false,
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          },
+          {
+            id: 'application_demo_2',
+            name: '이도윤',
+            email: 'doyoon@example.com',
+            phoneLast4: '8877',
+            ticketType: '초대',
+            status: 'approved',
+            checkinToken: 'SALON-DEMO-0002',
+            checkedIn: true,
+            checkedInAt: nowIso(),
+            checkedInBy: 'demo-admin',
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          },
+        ],
       }),
     },
   };
@@ -330,5 +361,6 @@ export function createSessionTemplate(input = {}) {
     questions: [],
     responses: [],
     participants: {},
+    checkinApplications: [],
   });
 }
