@@ -21,15 +21,31 @@ function createAudioContext() {
   return AudioContext ? new AudioContext() : null;
 }
 
-function playTone(audioContext, frequency, start, duration, gain = 0.04, type = 'sine') {
+const audioOutputNodes = new WeakMap();
+
+function checkinAudioOutput(audioContext) {
+  if (audioOutputNodes.has(audioContext)) return audioOutputNodes.get(audioContext);
+  const compressor = audioContext.createDynamicsCompressor();
+  compressor.threshold.setValueAtTime(-14, audioContext.currentTime);
+  compressor.knee.setValueAtTime(18, audioContext.currentTime);
+  compressor.ratio.setValueAtTime(10, audioContext.currentTime);
+  compressor.attack.setValueAtTime(0.002, audioContext.currentTime);
+  compressor.release.setValueAtTime(0.16, audioContext.currentTime);
+  compressor.connect(audioContext.destination);
+  audioOutputNodes.set(audioContext, compressor);
+  return compressor;
+}
+
+function playTone(audioContext, frequency, start, duration, gain = 0.24, type = 'triangle') {
   const oscillator = audioContext.createOscillator();
   const envelope = audioContext.createGain();
   oscillator.type = type;
   oscillator.frequency.setValueAtTime(frequency, start);
   envelope.gain.setValueAtTime(0.0001, start);
-  envelope.gain.exponentialRampToValueAtTime(gain, start + 0.012);
+  envelope.gain.exponentialRampToValueAtTime(gain, start + 0.008);
+  envelope.gain.setValueAtTime(gain * 0.88, start + Math.max(0.012, duration * 0.42));
   envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  oscillator.connect(envelope).connect(audioContext.destination);
+  oscillator.connect(envelope).connect(checkinAudioOutput(audioContext));
   oscillator.start(start);
   oscillator.stop(start + duration + 0.02);
 }
@@ -39,17 +55,36 @@ async function playCheckinSound(audioContext, status) {
   if (audioContext.state === 'suspended') await audioContext.resume();
   const now = audioContext.currentTime + 0.01;
   if (status === 'checked-in') {
-    playTone(audioContext, 660, now, 0.12, 0.13);
-    playTone(audioContext, 990, now + 0.11, 0.18, 0.12);
+    playTone(audioContext, 523.25, now, 0.11, 0.34, 'square');
+    playTone(audioContext, 783.99, now + 0.1, 0.13, 0.32, 'triangle');
+    playTone(audioContext, 1174.66, now + 0.21, 0.2, 0.24, 'sine');
     return;
   }
   if (status === 'already') {
-    playTone(audioContext, 520, now, 0.14, 0.09);
-    playTone(audioContext, 420, now + 0.1, 0.18, 0.08);
+    playTone(audioContext, 587.33, now, 0.12, 0.26, 'triangle');
+    playTone(audioContext, 440, now + 0.1, 0.19, 0.22, 'triangle');
     return;
   }
-  playTone(audioContext, 220, now, 0.2, 0.1, 'triangle');
-  playTone(audioContext, 165, now + 0.16, 0.24, 0.09, 'triangle');
+  playTone(audioContext, 220, now, 0.2, 0.3, 'sawtooth');
+  playTone(audioContext, 164.81, now + 0.15, 0.24, 0.24, 'triangle');
+}
+
+function CheckinCelebration() {
+  const colors = ['#b7ff38', '#42e8ff', '#fff8de', '#ff7a5f', '#ffd84a'];
+  return <div className="checkin-celebration" aria-hidden="true">
+    {Array.from({ length: 26 }).map((_, index) => (
+      <span
+        key={index}
+        style={{
+          '--angle': `${(index * 137.5) % 360}deg`,
+          '--distance': `${72 + (index % 7) * 16}px`,
+          '--delay': `${(index % 6) * 18}ms`,
+          '--particle-color': colors[index % colors.length],
+          '--particle-size': `${6 + (index % 4) * 2}px`,
+        }}
+      />
+    ))}
+  </div>;
 }
 
 const cameraFacingLabels = {
@@ -72,6 +107,7 @@ export default function CheckinPage() {
   const [scannerMessage, setScannerMessage] = useState('');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const [cameraFacing, setCameraFacing] = useState(() => {
     if (typeof window === 'undefined') return 'environment';
     return window.localStorage.getItem('offline-salon:checkin-camera-facing') || 'environment';
@@ -104,7 +140,7 @@ export default function CheckinPage() {
     window.localStorage.setItem('offline-salon:checkin-sound', next ? 'on' : 'off');
     if (next) {
       const audioContext = await prepareAudio(true);
-      await playCheckinSound(audioContext, 'already');
+      await playCheckinSound(audioContext, 'checked-in');
     }
   };
 
@@ -117,6 +153,7 @@ export default function CheckinPage() {
       const user = getCurrentUser();
       const next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
       setResult(next);
+      if (next.status === 'checked-in') setCelebrationKey((value) => value + 1);
       await playCheckinSound(audioContext, next.status);
       if (next.ok && next.status === 'checked-in') setManualValue('');
     } catch (reason) {
@@ -228,6 +265,7 @@ export default function CheckinPage() {
         </form>
       </div>
       <aside className={`checkin-result ${copy.tone}`} aria-live="polite">
+        {copy.tone === 'success' && celebrationKey ? <CheckinCelebration key={celebrationKey} /> : null}
         <span>{copy.tone === 'success' ? 'WELCOME' : copy.tone === 'already' ? 'ALREADY IN' : copy.tone === 'error' ? 'CHECK NEEDED' : 'READY'}</span>
         <h2>{copy.title}</h2>
         <p>{copy.body}</p>
