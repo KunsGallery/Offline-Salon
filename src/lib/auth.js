@@ -17,6 +17,13 @@ provider.setCustomParameters({
   prompt: 'select_account',
 });
 
+function prefersRedirectLogin() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  return /iPad|iPhone|iPod/.test(ua) || isTouchMac;
+}
+
 export function hasFirebaseAuth() {
   return Boolean(auth);
 }
@@ -53,6 +60,10 @@ export async function loginWithGoogle() {
     throw new Error(authUnavailableMessage);
   }
 
+  if (prefersRedirectLogin()) {
+    return signInWithRedirect(auth, provider);
+  }
+
   try {
     return await signInWithPopup(auth, provider);
   } catch (error) {
@@ -61,7 +72,9 @@ export async function loginWithGoogle() {
     if (
       error?.code === 'auth/popup-blocked' ||
       error?.code === 'auth/popup-closed-by-user' ||
-      error?.code === 'auth/cancelled-popup-request'
+      error?.code === 'auth/cancelled-popup-request' ||
+      error?.code === 'auth/operation-not-supported-in-this-environment' ||
+      error?.code === 'auth/web-storage-unsupported'
     ) {
       return signInWithRedirect(auth, provider);
     }

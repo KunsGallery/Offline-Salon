@@ -67,7 +67,7 @@ export default function LoginPage() {
 
         {displayError ? (
           <p className="error-text">
-            로그인에 실패했습니다. Firebase Authentication 설정과 승인된 도메인을 확인해주세요.
+            로그인에 실패했습니다. 아래 실제 오류 코드를 확인해주세요.
             <br />
             <span className="tiny muted mono-line">{displayError}</span>
           </p>
