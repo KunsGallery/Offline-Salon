@@ -39,17 +39,17 @@ async function playCheckinSound(audioContext, status) {
   if (audioContext.state === 'suspended') await audioContext.resume();
   const now = audioContext.currentTime + 0.01;
   if (status === 'checked-in') {
-    playTone(audioContext, 660, now, 0.11, 0.045);
-    playTone(audioContext, 990, now + 0.11, 0.16, 0.04);
+    playTone(audioContext, 660, now, 0.12, 0.13);
+    playTone(audioContext, 990, now + 0.11, 0.18, 0.12);
     return;
   }
   if (status === 'already') {
-    playTone(audioContext, 520, now, 0.12, 0.032);
-    playTone(audioContext, 420, now + 0.1, 0.16, 0.028);
+    playTone(audioContext, 520, now, 0.14, 0.09);
+    playTone(audioContext, 420, now + 0.1, 0.18, 0.08);
     return;
   }
-  playTone(audioContext, 220, now, 0.18, 0.035, 'triangle');
-  playTone(audioContext, 165, now + 0.16, 0.22, 0.032, 'triangle');
+  playTone(audioContext, 220, now, 0.2, 0.1, 'triangle');
+  playTone(audioContext, 165, now + 0.16, 0.24, 0.09, 'triangle');
 }
 
 const cameraFacingLabels = {
