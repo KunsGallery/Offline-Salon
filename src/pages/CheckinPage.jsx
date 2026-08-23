@@ -20,6 +20,7 @@ export default function CheckinPage() {
   const { sessionId } = useParams();
   const videoRef = useRef(null);
   const detectorRef = useRef(null);
+  const zxingControlsRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(0);
   const lastCodeRef = useRef('');
@@ -35,6 +36,7 @@ export default function CheckinPage() {
 
   useEffect(() => () => {
     window.cancelAnimationFrame(rafRef.current);
+    zxingControlsRef.current?.stop?.();
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
@@ -56,20 +58,34 @@ export default function CheckinPage() {
   };
 
   const startCamera = async () => {
-    if (!('BarcodeDetector' in window)) {
-      setScannerState('manual');
-      setScannerMessage('이 브라우저는 QR 자동 인식을 지원하지 않습니다. 아래 입력칸에 QR 값을 붙여넣어 주세요.');
-      return;
-    }
     try {
       setScannerState('starting');
+      stopCamera();
+      setScannerState('scanning');
+      setScannerMessage('카메라 중앙에 개인 QR을 맞춰 주세요.');
+      if (!('BarcodeDetector' in window)) {
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const reader = new BrowserMultiFormatReader();
+        const controls = await reader.decodeFromConstraints(
+          { video: { facingMode: 'environment' }, audio: false },
+          videoRef.current,
+          (scanResult) => {
+            const rawValue = scanResult?.getText?.() || '';
+            if (rawValue && rawValue !== lastCodeRef.current) {
+              lastCodeRef.current = rawValue;
+              checkin(rawValue);
+            }
+          },
+        );
+        zxingControlsRef.current = controls;
+        setScannerMessage('이 브라우저는 보조 스캐너로 QR을 읽고 있습니다. QR을 화면 중앙에 맞춰 주세요.');
+        return;
+      }
       detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
-      setScannerState('scanning');
-      setScannerMessage('카메라 중앙에 개인 QR을 맞춰 주세요.');
       const tick = async () => {
         if (!videoRef.current || scannerState === 'stopped') return;
         try {
@@ -87,14 +103,17 @@ export default function CheckinPage() {
       rafRef.current = window.requestAnimationFrame(tick);
     } catch (reason) {
       setScannerState('manual');
-      setScannerMessage(reason?.name === 'NotAllowedError' ? '카메라 권한이 필요합니다. 권한을 허용하거나 수동 입력을 사용해 주세요.' : '카메라를 시작하지 못했습니다. 수동 입력을 사용해 주세요.');
+      setScannerMessage(reason?.name === 'NotAllowedError' ? '카메라 권한이 필요합니다. 권한을 허용하거나 수동 입력을 사용해 주세요.' : `카메라 스캔을 시작하지 못했습니다. 수동 입력을 사용해 주세요.${reason?.message ? ` (${reason.message})` : ''}`);
     }
   };
 
   const stopCamera = () => {
     window.cancelAnimationFrame(rafRef.current);
+    zxingControlsRef.current?.stop?.();
+    zxingControlsRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
     setScannerState('idle');
     setScannerMessage('');
   };

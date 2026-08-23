@@ -1,5 +1,10 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  getAuth,
+  initializeAuth,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
@@ -16,5 +21,16 @@ export const app = hasCredentials
   ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
   : null;
 
+function createAuth(firebaseApp) {
+  if (!firebaseApp) return null;
+  try {
+    return initializeAuth(firebaseApp, {
+      persistence: [browserLocalPersistence, browserSessionPersistence],
+    });
+  } catch {
+    return getAuth(firebaseApp);
+  }
+}
+
 export const db = app ? getFirestore(app) : null;
-export const auth = app ? getAuth(app) : null;
+export const auth = createAuth(app);
