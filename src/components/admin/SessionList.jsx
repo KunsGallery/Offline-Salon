@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { realtime } from '../../lib/realtime';
-import { formatDateTime } from '../../lib/format';
+import { formatDateOnly, formatDateTime } from '../../lib/format';
 import { buildBranding, extractPalette } from '../../lib/colorPalette';
 import { createId } from '../../lib/ids';
 import { removeMedia, removeSessionMedia, uploadMedia } from '../../lib/media';
@@ -9,6 +9,8 @@ import { SESSION_MODULES } from '../../lib/sessionModules';
 export default function SessionList({ sessions, onOpen }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [salonDate, setSalonDate] = useState('');
+  const [groupChatUrl, setGroupChatUrl] = useState('');
   const [enabledModules, setEnabledModules] = useState([]);
   const [poster, setPoster] = useState(null);
   const [palette, setPalette] = useState([]);
@@ -25,7 +27,13 @@ export default function SessionList({ sessions, onOpen }) {
     let createdSession = null;
     let uploadedPoster = null;
     try {
-      const next = await Promise.resolve(realtime.createSession({ title: title.trim() || '새 세션', description: description.trim() || '실시간 인터랙티브 세션', enabledModules }));
+      const next = await Promise.resolve(realtime.createSession({
+        title: title.trim() || '새 세션',
+        description: description.trim() || '실시간 인터랙티브 세션',
+        salonDate,
+        groupChatUrl: groupChatUrl.trim(),
+        enabledModules,
+      }));
       createdSession = next;
       if (poster && palette.length) {
         const id = createId('poster');
@@ -33,7 +41,14 @@ export default function SessionList({ sessions, onOpen }) {
         uploadedPoster = await uploadMedia(next.id, 'poster', id, poster, `poster.${extension}`);
         await realtime.updateSession(next.id, { branding: { ...next.branding, ...buildBranding(palette), posterUrl: uploadedPoster.url, posterStoragePath: uploadedPoster.path } });
       }
-      setTitle(''); setDescription(''); setEnabledModules([]); setPoster(null); setPalette([]); onOpen(next.id);
+      setTitle('');
+      setDescription('');
+      setSalonDate('');
+      setGroupChatUrl('');
+      setEnabledModules([]);
+      setPoster(null);
+      setPalette([]);
+      onOpen(next.id);
     } catch (reason) {
       await removeMedia(uploadedPoster?.path).catch(() => undefined);
       if (createdSession?.id) await Promise.resolve(realtime.deleteSession(createdSession.id)).catch(() => undefined);
@@ -83,6 +98,15 @@ export default function SessionList({ sessions, onOpen }) {
             <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: UNFRAME 6월 살롱" />
           </label>
           <label className="field">
+            <span>살롱 날짜</span>
+            <input
+              className="input"
+              type="date"
+              value={salonDate}
+              onChange={(event) => setSalonDate(event.target.value)}
+            />
+          </label>
+          <label className="field">
             <span>설명</span>
             <textarea
               className="textarea"
@@ -90,6 +114,16 @@ export default function SessionList({ sessions, onOpen }) {
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="세션의 목적이나 간단한 메모"
+            />
+          </label>
+          <label className="field">
+            <span>단톡 URL</span>
+            <input
+              className="input"
+              type="url"
+              value={groupChatUrl}
+              onChange={(event) => setGroupChatUrl(event.target.value)}
+              placeholder="https://open.kakao.com/..."
             />
           </label>
           <label className="field session-poster-field"><span>모임 포스터 (선택)</span><input className="input" type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePoster} /><small>{poster ? `${poster.name} · 대표색 ${palette.length}개 추출` : '포스터를 넣으면 세션 컬러를 자동 생성합니다.'}</small></label>
@@ -129,6 +163,8 @@ export default function SessionList({ sessions, onOpen }) {
                     <span className={`badge status-${session.status}`}>{session.status}</span>
                   </div>
                   <p className="muted">{session.description}</p>
+                  <p className="tiny muted">살롱 날짜 {formatDateOnly(session.salonDate)}</p>
+                  {session.groupChatUrl ? <p className="tiny muted">단톡 URL 설정됨</p> : null}
                   <p className="tiny muted">업데이트 {formatDateTime(session.updatedAt)}</p>
                 </div>
 

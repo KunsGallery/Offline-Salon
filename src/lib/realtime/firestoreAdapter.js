@@ -69,6 +69,8 @@ function fromSessionDoc(id, data) {
       id,
       title: data.title,
       description: data.description,
+      salonDate: data.salonDate,
+      groupChatUrl: data.groupChatUrl,
       platform: data.platform || 'offline-salon-core',
       enabledModules: data.enabledModules || [],
       exhibitionReferences: data.exhibitionReferences || [],
@@ -299,6 +301,8 @@ const firestoreAdapter = {
     await setDoc(sessionDocRef(sessionId), {
       title: input.title || '새 세션',
       description: input.description || '실시간 인터랙티브 세션',
+      salonDate: input.salonDate || '',
+      groupChatUrl: input.groupChatUrl || '',
       platform: 'offline-salon-core',
       enabledModules: Array.isArray(input.enabledModules) ? input.enabledModules : [],
       exhibitionReferences: [],

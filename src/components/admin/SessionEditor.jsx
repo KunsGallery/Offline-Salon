@@ -30,12 +30,31 @@ export default function SessionEditor({ session }) {
           <input className="input" value={session.title} onChange={(event) => patch({ title: event.target.value })} />
         </label>
         <label className="field">
+          <span>살롱 날짜</span>
+          <input
+            className="input"
+            type="date"
+            value={session.salonDate || ''}
+            onChange={(event) => patch({ salonDate: event.target.value })}
+          />
+        </label>
+        <label className="field">
           <span>설명</span>
           <textarea
             className="textarea"
             rows="3"
             value={session.description}
             onChange={(event) => patch({ description: event.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>단톡 URL</span>
+          <input
+            className="input"
+            type="url"
+            value={session.groupChatUrl || ''}
+            onChange={(event) => patch({ groupChatUrl: event.target.value.trim() })}
+            placeholder="https://open.kakao.com/..."
           />
         </label>
         <div className="field">

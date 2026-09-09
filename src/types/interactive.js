@@ -40,6 +40,8 @@
  * @property {string} id
  * @property {string} title
  * @property {string} description
+ * @property {string} salonDate
+ * @property {string} groupChatUrl
  * @property {'offline-salon-core'} platform
  * @property {Array<'exhibition-grape'>} enabledModules
  * @property {Array<{id: string, title: string, venue: string, region: string, startDate: string, endDate: string, artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], createdAt: string, updatedAt: string}>} exhibitionReferences

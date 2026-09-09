@@ -8,6 +8,16 @@ export function formatDateTime(value) {
   });
 }
 
+export function formatDateOnly(value) {
+  if (!value) return '미설정';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  });
+}
+
 export function formatCompactTime(value) {
   if (!value) return '';
   return new Date(value).toLocaleTimeString('ko-KR', {
