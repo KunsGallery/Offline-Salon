@@ -103,7 +103,7 @@ export default function CheckinPage() {
   const rafRef = useRef(0);
   const lastCodeRef = useRef('');
   const audioContextRef = useRef(null);
-  const { session, loading, error } = useSession(sessionId);
+  const { session, loading, error } = useSession(sessionId, { lightweight: true });
   const [manualValue, setManualValue] = useState('');
   const [scannerState, setScannerState] = useState('idle');
   const [scannerMessage, setScannerMessage] = useState('');

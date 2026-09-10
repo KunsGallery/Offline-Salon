@@ -473,8 +473,9 @@ const firestoreAdapter = {
     );
   },
 
-  subscribeSession(sessionId, callback, onError) {
+  subscribeSession(sessionId, callback, onError, options = {}) {
     const unsubscribes = [];
+    const lightweight = options.lightweight === true;
     const emitSession = () => {
       const value = composeSession(sessionId);
       if (value !== undefined) callback(value);
@@ -495,14 +496,16 @@ const firestoreAdapter = {
           onError?.(error);
         },
       ));
-      unsubscribes.push(onSnapshot(query(artworksCol(sessionId), orderBy('order', 'asc')), (snap) => {
-        artworkCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
-        emitSession();
-      }, onError));
-      unsubscribes.push(onSnapshot(query(decksCol(sessionId), orderBy('order', 'asc')), (snap) => {
-        deckCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
-        emitSession();
-      }, onError));
+      if (!lightweight) {
+        unsubscribes.push(onSnapshot(query(artworksCol(sessionId), orderBy('order', 'asc')), (snap) => {
+          artworkCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
+          emitSession();
+        }, onError));
+        unsubscribes.push(onSnapshot(query(decksCol(sessionId), orderBy('order', 'asc')), (snap) => {
+          deckCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
+          emitSession();
+        }, onError));
+      }
     } catch (error) {
       console.error('[firestoreAdapter] subscribeSession setup failed:', error);
       onError?.(error);

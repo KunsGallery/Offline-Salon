@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { mode, realtime } from '../lib/realtime';
 
-export function useSession(sessionId) {
+export function useSession(sessionId, options = {}) {
+  const lightweight = options.lightweight === true;
   const initialSession = realtime.getSession?.(sessionId);
   const [session, setSession] = useState(() => initialSession);
   const [loading, setLoading] = useState(() => mode === 'firestore' && initialSession === undefined);
@@ -28,6 +29,7 @@ export function useSession(sessionId) {
           setError(nextError);
           setLoading(false);
         },
+        { lightweight },
       );
 
       return () => {
@@ -42,7 +44,7 @@ export function useSession(sessionId) {
       }
       return undefined;
     }
-  }, [sessionId]);
+  }, [lightweight, sessionId]);
 
   return { session, loading, error };
 }
