@@ -1,11 +1,64 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { realtime } from '../../lib/realtime';
 import { SESSION_MODULES } from '../../lib/sessionModules';
 
 export default function SessionEditor({ session }) {
+  const [draft, setDraft] = useState({
+    title: '',
+    salonDate: '',
+    description: '',
+    groupChatUrl: '',
+  });
+  const [saveState, setSaveState] = useState('idle');
+  const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (!session) return;
+    setDraft({
+      title: session.title || '',
+      salonDate: session.salonDate || '',
+      description: session.description || '',
+      groupChatUrl: session.groupChatUrl || '',
+    });
+    setSaveState('idle');
+    setSaveError('');
+  }, [session?.id, session?.title, session?.salonDate, session?.description, session?.groupChatUrl]);
+
+  const trimmedDraft = useMemo(() => ({
+    title: draft.title.trim() || '새 세션',
+    salonDate: draft.salonDate,
+    description: draft.description.trim() || '실시간 인터랙티브 세션',
+    groupChatUrl: draft.groupChatUrl.trim(),
+  }), [draft]);
+  const hasDraftChanges = Boolean(session) && (
+    trimmedDraft.title !== (session.title || '')
+    || trimmedDraft.salonDate !== (session.salonDate || '')
+    || trimmedDraft.description !== (session.description || '')
+    || trimmedDraft.groupChatUrl !== (session.groupChatUrl || '')
+  );
+
   if (!session) return null;
 
   const patch = (next) => realtime.updateSession(session.id, next);
+
+  const updateDraft = (key, value) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+    setSaveState('idle');
+    setSaveError('');
+  };
+
+  const saveDetails = async () => {
+    setSaveState('saving');
+    setSaveError('');
+    try {
+      await Promise.resolve(patch(trimmedDraft));
+      setSaveState('saved');
+    } catch (reason) {
+      setSaveState('error');
+      setSaveError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const toggleModule = (moduleId, enabled) => {
     const enabledModules = enabled
       ? [...new Set([...(session.enabledModules || []), moduleId])]
@@ -27,15 +80,15 @@ export default function SessionEditor({ session }) {
         <fieldset className="session-module-picker form-grid-wide"><legend>선택 활동 모듈</legend><p>Core 기능은 항상 유지됩니다. 이 세션에서 사용할 활동만 켜세요.</p>{SESSION_MODULES.map((module) => <label key={module.id}><input type="checkbox" checked={(session.enabledModules || []).includes(module.id)} onChange={(event) => toggleModule(module.id, event.target.checked)} /><span><strong>{module.title}</strong><small>{module.description}</small></span></label>)}</fieldset>
         <label className="field">
           <span>제목</span>
-          <input className="input" value={session.title} onChange={(event) => patch({ title: event.target.value })} />
+          <input className="input" value={draft.title} onChange={(event) => updateDraft('title', event.target.value)} />
         </label>
         <label className="field">
           <span>살롱 날짜</span>
           <input
             className="input"
             type="date"
-            value={session.salonDate || ''}
-            onChange={(event) => patch({ salonDate: event.target.value })}
+            value={draft.salonDate}
+            onChange={(event) => updateDraft('salonDate', event.target.value)}
           />
         </label>
         <label className="field">
@@ -43,8 +96,8 @@ export default function SessionEditor({ session }) {
           <textarea
             className="textarea"
             rows="3"
-            value={session.description}
-            onChange={(event) => patch({ description: event.target.value })}
+            value={draft.description}
+            onChange={(event) => updateDraft('description', event.target.value)}
           />
         </label>
         <label className="field">
@@ -52,11 +105,21 @@ export default function SessionEditor({ session }) {
           <input
             className="input"
             type="url"
-            value={session.groupChatUrl || ''}
-            onChange={(event) => patch({ groupChatUrl: event.target.value.trim() })}
+            value={draft.groupChatUrl}
+            onChange={(event) => updateDraft('groupChatUrl', event.target.value)}
             placeholder="https://open.kakao.com/..."
           />
         </label>
+        <div className="field">
+          <span>기본 정보 저장</span>
+          <div className="row wrap gap-sm align-center">
+            <button className="btn primary" type="button" disabled={!hasDraftChanges || saveState === 'saving'} onClick={saveDetails}>
+              {saveState === 'saving' ? '저장 중...' : '저장'}
+            </button>
+            {saveState === 'saved' ? <p className="tiny muted">저장되었습니다.</p> : null}
+            {saveState === 'error' ? <p className="tiny error-text">저장 실패: {saveError}</p> : null}
+          </div>
+        </div>
         <div className="field">
           <span>테마 색상 3개</span>
           <div className="theme-color-inputs">
