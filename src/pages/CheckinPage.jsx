@@ -12,8 +12,8 @@ import { sessionThemeStyle } from '../lib/colorPalette';
 
 function resultCopy(result) {
   if (!result) return { tone: 'idle', title: 'QR을 스캔해 주세요', body: 'join.unframe.kr에서 발급된 개인 QR 또는 체크인 토큰을 읽습니다.' };
-  if (result.status === 'checked-in') return { tone: 'success', title: `${result.application.name}님 입장 완료`, body: result.imported ? `${result.application.joinSalonTitle || 'Join QR'}에서 확인해 Salon 출석 명단에 자동 등록했습니다.` : `${result.application.ticketType || '일반'} · 지금 체크인되었습니다.` };
-  if (result.status === 'already') return { tone: 'already', title: `${result.application.name}님은 이미 입장했어요`, body: result.application.checkedInAt ? `${formatDateTime(result.application.checkedInAt)}에 체크인되었습니다.` : '이미 체크인된 신청자입니다.' };
+  if (result.status === 'checked-in') return { tone: 'success', title: `${result.application.name}님 입장 완료`, body: result.joinResult?.notificationStatus === 'pending' ? '입장은 완료되었습니다. 환영 알림톡을 발송하고 있어요.' : result.joinResult?.notificationStatus === 'failed' ? '입장은 완료되었습니다. 환영 알림톡 발송에 실패했습니다.' : result.imported ? `${result.application.joinSalonTitle || 'Join QR'}에서 확인해 Salon 출석 명단에 자동 등록했습니다.` : `${result.application.ticketType || '일반'} · 지금 체크인되었습니다.` };
+  if (result.status === 'already') return { tone: 'already', title: `${result.application.name}님은 이미 입장했어요`, body: result.joinResult?.notificationStatus === 'pending' ? '입장은 확인되었고 환영 알림톡을 발송하고 있어요.' : result.application.checkedInAt ? `${formatDateTime(result.application.checkedInAt)}에 체크인되었습니다.` : '이미 체크인된 신청자입니다.' };
   if (result.status === 'cancelled') return { tone: 'error', title: '취소된 신청입니다', body: `${result.application.name}님의 신청 상태를 어드민에서 확인해 주세요.` };
   return { tone: 'error', title: 'QR을 확인하지 못했습니다', body: result.message || 'Join 개인 QR 또는 수동 명단 토큰을 확인해 주세요.' };
 }
