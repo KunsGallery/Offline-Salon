@@ -11,8 +11,10 @@ import {
 } from '../../lib/exhibitionCatalog';
 
 const GRAPE_POSITIONS = [
-  [50, 9], [36, 18], [64, 18], [25, 30], [50, 31], [75, 30], [17, 43], [39, 44], [61, 44], [83, 43],
-  [28, 57], [50, 58], [72, 57], [38, 70], [62, 70], [50, 83], [42, 94], [58, 94],
+  [34, 18], [50, 18], [66, 18],
+  [20, 36], [40, 36], [60, 36], [80, 36],
+  [36, 56], [64, 56],
+  [50, 77],
 ];
 
 export const GRAPE_STATUSES = [
@@ -165,6 +167,7 @@ export function ExhibitionGrapeParticipantView({ session, participant, onSaveSel
   const [preview, setPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const recordedRef = useRef(null);
   const selections = grapeSelectionList(participant);
   const metric = GRAPE_STATUSES.find((item) => item.id === draft.status)?.metric || '기대감';
 
@@ -205,6 +208,7 @@ export function ExhibitionGrapeParticipantView({ session, participant, onSaveSel
       setDraft(emptyDraft);
       setPreview('');
       setMessage(`“${draft.title.trim()}”가 내 포도에 열렸어요.`);
+      window.setTimeout(() => recordedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
     } catch (error) { setMessage(error?.message || '전시를 저장하지 못했습니다. 다시 시도해 주세요.'); }
     finally { setSaving(false); }
   };
@@ -223,6 +227,10 @@ export function ExhibitionGrapeParticipantView({ session, participant, onSaveSel
       <div className="grape-status-options">{GRAPE_STATUSES.map((item) => <button type="button" className={draft.status === item.id ? 'active' : ''} aria-pressed={draft.status === item.id} key={item.id} onClick={() => setDraft({ ...draft, status: item.id })}>{item.label}</button>)}</div>
       <label className="grape-rating-range"><span><b>{metric}</b><strong style={{ '--rating-color': ratingColor(draft.rating) }}>{draft.rating}</strong></span><input type="range" min="1" max="10" step="1" value={draft.rating} onChange={(event) => setDraft({ ...draft, rating: Number(event.target.value) })} /><i><small>1</small><small>마음이 움직인 만큼</small><small>10</small></i></label>
       <button className="grape-save-button" type="button" disabled={saving} onClick={save}>{saving ? '사진을 안전하게 저장하는 중…' : draft.id ? '포도알 수정하기' : '내 포도에 한 알 추가'}</button>
+    </section> : null}
+    {selections.length ? <section ref={recordedRef} className="grape-catalog" aria-label="이미 기록된 전시">
+      <header><div><h2>이미 기록된 전시</h2><span>{selections.length}개의 전시가 내 포도에 담겨 있어요.</span></div><span>포도알을 눌러 수정</span></header>
+      <div>{selections.map((selection) => <button type="button" key={selection.id} onClick={() => openExisting(selection.id)}><img src={selection.photoUrl} alt="" /><span><strong>{selection.title}</strong><small>{selection.venue || '장소 미입력'} · {selection.rating}/10</small></span></button>)}</div>
     </section> : null}
   </main>;
 }
