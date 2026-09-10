@@ -156,12 +156,30 @@ export default function CheckinPage() {
       let next;
       if (payload.isJoinPayload || payload.token?.length >= 32) {
         if (!session.joinSalonId) throw new Error('이 세션에 Join 살롱 ID가 설정되지 않았습니다. 어드민 세션 설정에서 저장해 주세요.');
-        const joinPass = await lookupJoinSalonPass(raw);
-        const joinResult = await confirmJoinCheckin({ salonId: session.joinSalonId, qrPayload: raw });
-        const existing = findCheckinApplication(session.checkinApplications || [], { joinTokenHash: joinPass.tokenHash });
+        const [passLookup, checkinConfirmation] = await Promise.allSettled([
+          lookupJoinSalonPass(raw),
+          confirmJoinCheckin({ salonId: session.joinSalonId, qrPayload: raw }),
+        ]);
+        if (checkinConfirmation.status === 'rejected') throw checkinConfirmation.reason;
+        const joinResult = checkinConfirmation.value;
+        const joinPass = passLookup.status === 'fulfilled'
+          ? passLookup.value
+          : {
+            applicantDisplayName: joinResult.participant?.name || '참가자',
+            participantId: joinResult.participant?.id || '',
+            salonTitle: session.title,
+            eventDateTime: session.salonDate || '',
+            venueName: '',
+            tokenHash: '',
+            joinCheckedInAt: joinResult.checkedInAt || null,
+          };
+        const existing = findCheckinApplication(session.checkinApplications || [], {
+          joinTokenHash: joinPass.tokenHash,
+          joinParticipantId: joinResult.participant?.id || joinPass.participantId,
+        });
         const imported = createCheckinApplicationFromJoinPass({
           ...joinPass,
-          joinParticipantId: joinResult.participant?.id || '',
+          joinParticipantId: joinResult.participant?.id || joinPass.participantId || '',
           joinCheckinStatus: joinResult.status,
           joinNotificationStatus: joinResult.notificationStatus || '',
           joinNotificationError: joinResult.notificationError || joinResult.welcomeNotificationError || '',

@@ -72,6 +72,7 @@ export function findCheckinApplication(applications = [], payload = {}) {
   return applications.find((application) =>
     (applicationId && application.id === applicationId) ||
     (joinTokenHash && application.joinTokenHash === joinTokenHash) ||
+    (payload.joinParticipantId && application.joinParticipantId === payload.joinParticipantId) ||
     (token && application.checkinToken === token) ||
     (raw && (application.checkinToken === raw || application.id === raw)),
   ) || null;
@@ -80,10 +81,11 @@ export function findCheckinApplication(applications = [], payload = {}) {
 export function createCheckinApplicationFromJoinPass(pass = {}) {
   const now = new Date().toISOString();
   const tokenHash = String(pass.tokenHash || '').trim();
-  if (!tokenHash) return null;
+  const participantId = String(pass.joinParticipantId || pass.participantId || '').trim();
+  if (!tokenHash && !participantId) return null;
   return normalizeCheckinApplication({
-    id: `join_${tokenHash.slice(0, 18)}`,
-    name: pass.applicantDisplayName || '참가자',
+    id: `join_${tokenHash.slice(0, 18) || participantId}`,
+    name: pass.applicantDisplayName || pass.participantName || '참가자',
     email: '',
     phoneLast4: '',
     ticketType: pass.salonTitle || 'Join QR',
