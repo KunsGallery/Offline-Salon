@@ -3,8 +3,10 @@ import { useParams } from 'react-router-dom';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { useSession } from '../hooks/useSession';
 import { getCurrentUser } from '../lib/auth';
-import { checkinSummary, parseCheckinPayload, sortCheckinApplications } from '../lib/checkin';
+import { checkinSummary, createCheckinApplicationFromJoinPass, findCheckinApplication, parseCheckinPayload, sortCheckinApplications } from '../lib/checkin';
 import { formatDateTime } from '../lib/format';
+import { lookupJoinSalonPass } from '../lib/joinPass';
+import { confirmJoinCheckin } from '../lib/joinCheckin';
 import { realtime } from '../lib/realtime';
 import { sessionThemeStyle } from '../lib/colorPalette';
 
@@ -13,7 +15,7 @@ function resultCopy(result) {
   if (result.status === 'checked-in') return { tone: 'success', title: `${result.application.name}님 입장 완료`, body: result.imported ? `${result.application.joinSalonTitle || 'Join QR'}에서 확인해 Salon 출석 명단에 자동 등록했습니다.` : `${result.application.ticketType || '일반'} · 지금 체크인되었습니다.` };
   if (result.status === 'already') return { tone: 'already', title: `${result.application.name}님은 이미 입장했어요`, body: result.application.checkedInAt ? `${formatDateTime(result.application.checkedInAt)}에 체크인되었습니다.` : '이미 체크인된 신청자입니다.' };
   if (result.status === 'cancelled') return { tone: 'error', title: '취소된 신청입니다', body: `${result.application.name}님의 신청 상태를 어드민에서 확인해 주세요.` };
-  return { tone: 'error', title: 'QR을 확인하지 못했습니다', body: result.message || (result.payload?.raw ? `읽은 값: ${result.payload.raw}` : 'Join 개인 QR 또는 수동 명단 토큰을 확인해 주세요.') };
+  return { tone: 'error', title: 'QR을 확인하지 못했습니다', body: result.message || 'Join 개인 QR 또는 수동 명단 토큰을 확인해 주세요.' };
 }
 
 function createAudioContext() {
@@ -150,8 +152,35 @@ export default function CheckinPage() {
     setBusy(true);
     try {
       const audioContext = await prepareAudio();
-      const user = getCurrentUser();
-      const next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
+      const payload = parseCheckinPayload(raw);
+      let next;
+      if (payload.isJoinPayload || payload.token?.length >= 32) {
+        if (!session.joinSalonId) throw new Error('이 세션에 Join 살롱 ID가 설정되지 않았습니다. 어드민 세션 설정에서 저장해 주세요.');
+        const joinPass = await lookupJoinSalonPass(raw);
+        const joinResult = await confirmJoinCheckin({ salonId: session.joinSalonId, qrPayload: raw });
+        const existing = findCheckinApplication(session.checkinApplications || [], { joinTokenHash: joinPass.tokenHash });
+        const imported = createCheckinApplicationFromJoinPass({
+          ...joinPass,
+          joinParticipantId: joinResult.participant?.id || '',
+          joinCheckinStatus: joinResult.status,
+          joinNotificationStatus: joinResult.notificationStatus || '',
+          joinNotificationError: joinResult.notificationError || joinResult.welcomeNotificationError || '',
+          joinCheckedInAt: joinResult.checkedInAt || joinPass.joinCheckedInAt,
+        });
+        if (!imported) throw new Error('Join 참가자 정보를 만들지 못했습니다.');
+        const now = joinResult.checkedInAt || new Date().toISOString();
+        const application = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, {
+          ...imported,
+          ...(existing ? { id: existing.id, createdAt: existing.createdAt } : {}),
+          checkedIn: true,
+          checkedInAt: now,
+          checkedInBy: getCurrentUser()?.email || getCurrentUser()?.uid || 'join-confirmed',
+        }));
+        next = { ok: true, status: joinResult.duplicate ? 'already' : 'checked-in', application, imported: !existing, joinPass, joinResult };
+      } else {
+        const user = getCurrentUser();
+        next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
+      }
       setResult(next);
       if (next.status === 'checked-in') setCelebrationKey((value) => value + 1);
       await playCheckinSound(audioContext, next.status);
@@ -260,7 +289,7 @@ export default function CheckinPage() {
         <div className="checkin-actions"><button type="button" onClick={() => startCamera()} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : `${cameraFacingLabels[cameraFacing]} 스캔 시작`}</button><button className="checkin-secondary-action" type="button" onClick={switchCamera} disabled={scannerState === 'starting'}>{cameraFacing === 'environment' ? '전면으로 전환' : '후면으로 전환'}</button><button className="checkin-secondary-action" type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
         <form className="checkin-manual" onSubmit={(event) => { event.preventDefault(); checkin(manualValue); }}>
           <label><span>수동 체크인</span><input value={manualValue} onChange={(event) => setManualValue(event.target.value)} placeholder="QR URL, applicationId, token" /></label>
-          <small>{parsed.token || parsed.applicationId ? `인식 후보: ${parsed.applicationId || parsed.token}` : 'Join 패스 링크나 체크인 QR 값을 붙여넣어도 됩니다.'}</small>
+          <small>{parsed.token || parsed.applicationId ? (parsed.isJoinPayload ? 'Join QR 값을 인식했습니다. 서버 검증을 진행할 수 있습니다.' : '체크인 값을 인식했습니다.') : 'Join 패스 링크나 체크인 QR 값을 붙여넣어도 됩니다.'}</small>
           <button type="submit" disabled={busy || !manualValue.trim()}>{busy ? '확인 중…' : '체크인 처리'}</button>
         </form>
       </div>

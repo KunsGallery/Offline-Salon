@@ -43,6 +43,10 @@ export default function CheckinManager({ session }) {
     setForm({ name: item.name || '', email: item.email || '', phoneLast4: item.phoneLast4 || '', ticketType: item.ticketType || '일반', checkinToken: item.checkinToken || '', notes: item.notes || '' });
   };
   const checkIn = async (item) => {
+    if (item.source === 'join' || item.joinTokenHash) {
+      setMessage('Join 참가자는 개인 QR을 다시 스캔해 Join 검증 후 입장 처리해야 합니다.');
+      return;
+    }
     setBusyId(item.id);
     try {
       await Promise.resolve(realtime.checkInApplication(session.id, item.checkinToken || item.id, 'admin-manual'));
@@ -96,12 +100,12 @@ export default function CheckinManager({ session }) {
     <section className="panel checkin-join-guide">
       <div>
         <h2>Join QR 자동 등록</h2>
-        <p className="muted">`join.unframe.kr` 신청·승인 시스템은 그대로 두고, 이 화면에서는 개인 QR의 토큰을 확인해 이름과 행사 정보를 가져온 뒤 Salon 출석 명단으로 관리합니다.</p>
+        <p className="muted">Join 개인 QR은 Join 서버에서 승인·만료·살롱 일치 여부를 최종 확인한 뒤에만 Salon 출석으로 기록됩니다. 중복 스캔은 성공적인 상태 동기화로 처리됩니다.</p>
       </div>
       <ol>
         <li><strong>1</strong><span>참가자가 Join 개인 QR을 보여줍니다.</span></li>
         <li><strong>2</strong><span>스태프가 체크인 화면에서 QR을 스캔합니다.</span></li>
-        <li><strong>3</strong><span>Salon에 참가자가 자동 등록되고 입장 완료로 표시됩니다.</span></li>
+        <li><strong>3</strong><span>Join 검증 성공 후 Salon에 자동 등록되고 입장 완료로 표시됩니다.</span></li>
       </ol>
     </section>
     <section className="panel checkin-admin-workspace">
@@ -120,7 +124,7 @@ export default function CheckinManager({ session }) {
         {filtered.length ? <div>{filtered.map((item) => {
           const isJoin = item.source === 'join' || item.joinTokenHash;
           const code = isJoin ? `Join ${item.joinShortCode || item.joinTokenHash?.slice(0, 6)?.toUpperCase()}` : item.checkinToken;
-          return <article className={`${item.checkedIn ? 'checked' : ''} ${isJoin ? 'from-join' : ''}`} key={item.id}><div><strong>{item.name}</strong><span>{isJoin ? `${item.joinSalonTitle || item.ticketType} · ${item.joinEventDateTime || 'Join QR'} · ${item.joinVenueName || '장소 미정'}` : `${item.ticketType} · ${item.email || '이메일 없음'} · ${item.phoneLast4 || '번호 없음'}`}</span><code>{code || '수동 참가자'}</code>{item.checkedIn ? <small>입장 {formatDateTime(item.checkedInAt)}</small> : null}</div><div>{!isJoin && item.checkinToken ? <button type="button" onClick={() => copy(item.checkinToken)}>토큰 복사</button> : null}<button type="button" onClick={() => edit(item)}>수정</button>{item.checkedIn ? <button type="button" onClick={() => undo(item)} disabled={busyId === item.id}>출석 취소</button> : <button type="button" onClick={() => checkIn(item)} disabled={busyId === item.id}>수동 출석</button>}<button type="button" onClick={() => remove(item)} disabled={busyId === item.id}>삭제</button></div></article>;
+          return <article className={`${item.checkedIn ? 'checked' : ''} ${isJoin ? 'from-join' : ''}`} key={item.id}><div><strong>{item.name}</strong><span>{isJoin ? `${item.joinSalonTitle || item.ticketType} · ${item.joinEventDateTime || 'Join QR'} · ${item.joinVenueName || '장소 미정'}` : `${item.ticketType} · ${item.email || '이메일 없음'} · ${item.phoneLast4 || '번호 없음'}`}</span><code>{code || '수동 참가자'}</code>{item.checkedIn ? <small>입장 {formatDateTime(item.checkedInAt)}</small> : null}{isJoin && item.joinNotificationStatus === 'failed' ? <small className="error-text">입장 알림톡 실패{item.joinNotificationError ? ` · ${item.joinNotificationError}` : ''}</small> : null}{isJoin && item.joinNotificationStatus === 'sent' ? <small>입장 알림톡 발송 완료</small> : null}</div><div>{!isJoin && item.checkinToken ? <button type="button" onClick={() => copy(item.checkinToken)}>토큰 복사</button> : null}<button type="button" onClick={() => edit(item)}>수정</button>{item.checkedIn ? <button type="button" onClick={() => undo(item)} disabled={busyId === item.id}>출석 취소</button> : <button type="button" onClick={() => checkIn(item)} disabled={busyId === item.id || isJoin}>{isJoin ? 'QR 재스캔 필요' : '수동 출석'}</button>}<button type="button" onClick={() => remove(item)} disabled={busyId === item.id}>삭제</button></div></article>;
         })}</div> : <p className="checkin-empty">아직 등록된 참가자가 없습니다. Join 개인 QR을 처음 스캔하면 여기에 자동으로 쌓입니다.</p>}
       </div>
     </section>

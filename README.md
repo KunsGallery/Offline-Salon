@@ -217,3 +217,11 @@ PPTX는 현재 지원하지 않습니다.
 이미지와 PDF는 Firebase Storage가 아닌 Cloudflare R2에 저장합니다. API 키 입력 위치와 CORS 설정은 [`docs/R2_SETUP.md`](docs/R2_SETUP.md), 행사 진행 순서는 [`docs/ADMIN_GUIDE.md`](docs/ADMIN_GUIDE.md)를 확인하세요.
 
 로컬 모드의 미디어는 현재 브라우저 탭에서만 유지되는 리허설용입니다. 실제 행사와 여러 기기 동기화에는 Firestore 모드를 사용하세요.
+
+## Join 체크인 연동
+
+세션 설정의 `Join 살롱 ID`에는 Join 프로젝트의 `salonEvents` 문서 ID를 입력하고 저장합니다. 이 값은 Join의 체크인 요청에서 사용하는 `salonId`와 같아야 합니다.
+
+Salon Netlify에는 `JOIN_CHECKIN_SHARED_SECRET`을 등록하고, Join Netlify에는 같은 값을 `SALON_CHECKIN_SHARED_SECRET`으로 등록합니다. 이 값은 기존에 찾아오는 시크릿이 아니라 두 프로젝트가 공유할 새 랜덤 문자열입니다. 예를 들어 터미널에서 `openssl rand -hex 32`로 생성할 수 있으며, 브라우저 환경변수(`VITE_` 접두사)로 등록하면 안 됩니다.
+
+Join QR 체크인 요청은 Salon 서버 함수가 처리합니다. Join 검증이 성공하거나 이미 체크인된 상태일 때만 Salon 출석 명단을 갱신하며, 알림톡 발송 실패는 입장 완료와 별도로 명단에서 확인할 수 있습니다.

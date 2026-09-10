@@ -42,10 +42,11 @@
  * @property {string} description
  * @property {string} salonDate
  * @property {string} groupChatUrl
+ * @property {string} joinSalonId Join salonEvents document ID
  * @property {'offline-salon-core'} platform
  * @property {Array<'exhibition-grape'>} enabledModules
  * @property {Array<{id: string, title: string, venue: string, region: string, startDate: string, endDate: string, artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], createdAt: string, updatedAt: string}>} exhibitionReferences
- * @property {Array<{id: string, name: string, email: string, phoneLast4: string, ticketType: string, status: 'approved'|'pending'|'cancelled', checkinToken: string, source?: 'manual'|'join', joinTokenHash?: string, joinShortCode?: string, joinSalonTitle?: string, joinEventDateTime?: string, joinVenueName?: string, checkedIn: boolean, checkedInAt: string|null, checkedInBy: string|null, createdAt: string, updatedAt: string}>} checkinApplications
+ * @property {Array<{id: string, name: string, email: string, phoneLast4: string, ticketType: string, status: 'approved'|'pending'|'cancelled', checkinToken: string, source?: 'manual'|'join', joinTokenHash?: string, joinShortCode?: string, joinSalonTitle?: string, joinEventDateTime?: string, joinVenueName?: string, joinParticipantId?: string, joinCheckinStatus?: string, joinNotificationStatus?: string, joinNotificationError?: string, checkedIn: boolean, checkedInAt: string|null, checkedInBy: string|null, createdAt: string, updatedAt: string}>} checkinApplications
  * @property {SessionStatus} status
  * @property {string|null} currentQuestionId
  * @property {boolean} showResults

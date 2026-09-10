@@ -8,6 +8,7 @@ export default function SessionEditor({ session }) {
     salonDate: '',
     description: '',
     groupChatUrl: '',
+    joinSalonId: '',
   });
   const [saveState, setSaveState] = useState('idle');
   const [saveError, setSaveError] = useState('');
@@ -19,22 +20,25 @@ export default function SessionEditor({ session }) {
       salonDate: session.salonDate || '',
       description: session.description || '',
       groupChatUrl: session.groupChatUrl || '',
+      joinSalonId: session.joinSalonId || '',
     });
     setSaveState('idle');
     setSaveError('');
-  }, [session?.id, session?.title, session?.salonDate, session?.description, session?.groupChatUrl]);
+  }, [session?.id, session?.title, session?.salonDate, session?.description, session?.groupChatUrl, session?.joinSalonId]);
 
   const trimmedDraft = useMemo(() => ({
     title: draft.title.trim() || '새 세션',
     salonDate: draft.salonDate,
     description: draft.description.trim() || '실시간 인터랙티브 세션',
     groupChatUrl: draft.groupChatUrl.trim(),
+    joinSalonId: draft.joinSalonId.trim(),
   }), [draft]);
   const hasDraftChanges = Boolean(session) && (
     trimmedDraft.title !== (session.title || '')
     || trimmedDraft.salonDate !== (session.salonDate || '')
     || trimmedDraft.description !== (session.description || '')
     || trimmedDraft.groupChatUrl !== (session.groupChatUrl || '')
+    || trimmedDraft.joinSalonId !== (session.joinSalonId || '')
   );
 
   if (!session) return null;
@@ -109,6 +113,16 @@ export default function SessionEditor({ session }) {
             onChange={(event) => updateDraft('groupChatUrl', event.target.value)}
             placeholder="https://open.kakao.com/..."
           />
+        </label>
+        <label className="field">
+          <span>Join 살롱 ID</span>
+          <input
+            className="input"
+            value={draft.joinSalonId}
+            onChange={(event) => updateDraft('joinSalonId', event.target.value)}
+            placeholder="Join salonEvents 문서 ID"
+          />
+          <small className="muted">Join 관리자에서 사용하는 살롱 문서 ID와 정확히 같아야 합니다.</small>
         </label>
         <div className="field">
           <span>기본 정보 저장</span>
