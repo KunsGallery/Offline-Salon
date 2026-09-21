@@ -172,7 +172,7 @@ function EvidenceWall({ participants = [], currentId = '' }) {
     {participants.map((participant, index) => {
       const slot = EVIDENCE_SLOTS[index % EVIDENCE_SLOTS.length];
       const active = participant.participantId === currentId;
-      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={participant.participantId} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg` }}>
+      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={`${participant.participantId || 'evidence'}-${index}`} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg` }}>
         <span className="pear-evidence-pin" aria-hidden="true" />
         <img src={participant.pearPairing.photoUrl} alt={`${participant.nickname || '익명'}의 사건 사진`} />
         <footer><b>CASE {String(index + 1).padStart(2, '0')}</b><span>{participant.nickname || '익명'}</span></footer>
