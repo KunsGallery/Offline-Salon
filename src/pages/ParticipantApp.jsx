@@ -313,7 +313,7 @@ export default function ParticipantApp() {
     return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} onSaveSelection={handleSaveGrapeSelection} /></div>;
   }
 
-  if (session.stage?.mode === 'pear-play' && hasSessionModule(session, 'pear-play')) {
+  if (hasSessionModule(session, 'pear-play') && (session.stage?.mode === 'pear-play' || (session.stage?.mode === 'lobby' && !currentQuestion))) {
     return <div style={accentStyle}><PearPlayParticipantView session={session} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} /></div>;
   }
 
