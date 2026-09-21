@@ -3932,6 +3932,20 @@ button {
   background-position: center;
   background-size: cover;
 }
+.pear-host-selected {
+  background-image: url('/pear-play/pear-case-rabbit-original.webp');
+  background-position: center;
+  background-size: cover;
+}
+.pear-evidence-wall-layer {
+  display: contents;
+  transition: opacity .25s ease, visibility .25s ease;
+}
+.pear-evidence-wall-layer.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
 .pear-host-vignette {
   z-index: 0;
   background: linear-gradient(90deg, rgba(20, 13, 9, .16), transparent 42%, rgba(20, 13, 9, .06));
@@ -4172,16 +4186,31 @@ button {
 .pear-pinning-photo img { width: 100%; height: 100%; object-fit: cover; }
 .pear-evidence-content .pear-evidence-pin { z-index: 4; }
 .pear-selected-photo {
+  position: relative;
   margin-top: 10px;
-  padding: 8px;
-  border: 1px solid rgba(246, 231, 197, .72);
+  padding: 12px;
+  border: 2px solid rgba(246, 231, 197, .92);
   background: #f8efd8;
   box-shadow: 0 16px 30px rgba(20, 10, 5, .32);
   transform: rotate(-1.5deg);
 }
+.pear-selected-photo::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 17px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #f4b09b 0 12%, #a83d35 28%, #6e201d 72%);
+  box-shadow: 0 2px 3px rgba(20, 10, 5, .4);
+  transform: translateX(-50%);
+  z-index: 2;
+}
 .pear-selected-photo img {
   width: 100%;
-  max-height: 38vh;
+  height: auto;
+  max-height: 52vh;
   display: block;
   object-fit: contain;
   background: #d5c8ac;
@@ -4212,6 +4241,46 @@ button {
   0% { opacity: 0; transform: translate(3%, -12%) rotate(calc(var(--evidence-rotate) - 2deg)) scale(.92); }
   72% { opacity: 1; transform: translate(0, 0) rotate(var(--evidence-rotate)) scale(1); }
   100% { opacity: 1; transform: translate(0, 0) rotate(var(--evidence-rotate)) scale(1); }
+}
+
+/* Selected case: the rabbit points to one large piece of evidence on the clear board. */
+.pear-host-selected > header { min-height: 0; }
+.pear-host-selected > header > div { display: none; }
+.pear-host-selected > header > strong { margin-left: auto; }
+.pear-host-selected .pear-host-state-photo {
+  top: 12%;
+  right: auto;
+  bottom: auto;
+  left: 38.5%;
+  width: min(48vw, 760px);
+  max-height: 58vh;
+  color: #2f2018;
+  text-shadow: none;
+}
+.pear-host-selected .pear-host-state-photo > .pear-case-label,
+.pear-host-selected .pear-host-state-photo > p { display: none; }
+.pear-host-selected .pear-selected-photo {
+  margin-top: 0;
+  padding: 14px;
+  border-width: 3px;
+  box-shadow: 0 20px 36px rgba(20, 10, 5, .38);
+}
+.pear-host-selected .pear-selected-photo img { max-height: 54vh; }
+
+@media (max-width: 820px) {
+  .pear-host-selected {
+    min-height: 100dvh;
+    padding: 22px 14px 30px;
+    background-position: 50% center;
+  }
+  .pear-host-selected .pear-host-state-photo {
+    top: 14%;
+    left: 27%;
+    width: 69vw;
+    max-height: 50vh;
+  }
+  .pear-host-selected .pear-selected-photo { padding: 8px; }
+  .pear-host-selected .pear-selected-photo img { max-height: 43vh; }
 }
 @media (max-width: 820px) {
   .pear-envelope-visual { width: min(100%, 430px); }
