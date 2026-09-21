@@ -33,6 +33,7 @@
  * @property {string} participantId
  * @property {string|null} nickname
  * @property {Record<string, {id: string, title: string, venue: string, photoUrl: string, photoPath: string|null, status: 'want'|'expecting'|'seen', rating: number, referenceId: string, region: string, monthTags: number[], artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], source: 'participant'|'reference', createdAt: string, updatedAt: string}>} grapeSelections
+ * @property {{status: 'ready'|'analyzing'|'error', photoUrl: string, photoPath: string|null, analysis: Object|null, candidates: Object[], finalArtwork: Object|null, connection: string, statement: string, keywords: string[], error: string, createdAt: string, updatedAt: string}|null} pearPairing
  * @property {string} joinedAt
  * @property {string} lastSeenAt
  *
@@ -44,7 +45,7 @@
  * @property {string} groupChatUrl
  * @property {string} joinSalonId Join salonEvents document ID
  * @property {'offline-salon-core'} platform
- * @property {Array<'exhibition-grape'>} enabledModules
+ * @property {Array<'exhibition-grape'|'pear-play'>} enabledModules
  * @property {Array<{id: string, title: string, venue: string, region: string, startDate: string, endDate: string, artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], createdAt: string, updatedAt: string}>} exhibitionReferences
  * @property {Array<{id: string, name: string, email: string, phoneLast4: string, ticketType: string, status: 'approved'|'pending'|'cancelled', checkinToken: string, source?: 'manual'|'join', joinTokenHash?: string, joinShortCode?: string, joinSalonTitle?: string, joinEventDateTime?: string, joinVenueName?: string, joinParticipantId?: string, joinCheckinStatus?: string, joinNotificationStatus?: string, joinNotificationError?: string, checkedIn: boolean, checkedInAt: string|null, checkedInBy: string|null, createdAt: string, updatedAt: string}>} checkinApplications
  * @property {SessionStatus} status

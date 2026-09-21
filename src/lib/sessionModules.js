@@ -4,6 +4,11 @@ export const SESSION_MODULES = [
     title: '전시 포도',
     description: '참여자가 전시 사진과 감상을 포도알로 만들고 함께 모아봅니다.',
   },
+  {
+    id: 'pear-play',
+    title: 'PEAR PLAY',
+    description: '일상 사진을 AI가 실제 미술 작품과 연결하고 함께 사건처럼 풀어봅니다.',
+  },
 ];
 
 export function normalizeSessionModules(value) {

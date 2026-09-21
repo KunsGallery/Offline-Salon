@@ -36,6 +36,20 @@ export function cloneParticipant(participant) {
     grapeSelections: Object.fromEntries(
       Object.entries(participant?.grapeSelections || {}).map(([selectionId, selection]) => [selectionId, { ...selection }]),
     ),
+    pearPairing: participant?.pearPairing ? {
+      ...participant.pearPairing,
+      analysis: participant.pearPairing.analysis ? {
+        ...participant.pearPairing.analysis,
+        objects: [...(participant.pearPairing.analysis.objects || [])],
+        colors: [...(participant.pearPairing.analysis.colors || [])],
+        composition: [...(participant.pearPairing.analysis.composition || [])],
+        context: [...(participant.pearPairing.analysis.context || [])],
+        concept: [...(participant.pearPairing.analysis.concept || [])],
+      } : null,
+      candidates: (participant.pearPairing.candidates || []).map((candidate) => ({ ...candidate })),
+      finalArtwork: participant.pearPairing.finalArtwork ? { ...participant.pearPairing.finalArtwork } : null,
+      keywords: [...(participant.pearPairing.keywords || [])],
+    } : null,
   };
 }
 
@@ -137,6 +151,46 @@ export function normalizeResponse(response) {
 }
 
 export function normalizeParticipant(participantId, participant) {
+  const pearPairing = participant?.pearPairing && typeof participant.pearPairing === 'object'
+    ? {
+      status: ['ready', 'analyzing', 'error'].includes(participant.pearPairing.status) ? participant.pearPairing.status : 'ready',
+      photoUrl: String(participant.pearPairing.photoUrl || '').trim(),
+      photoPath: participant.pearPairing.photoPath || null,
+      analysis: participant.pearPairing.analysis && typeof participant.pearPairing.analysis === 'object' ? {
+        objects: Array.isArray(participant.pearPairing.analysis.objects) ? participant.pearPairing.analysis.objects.map(String).slice(0, 8) : [],
+        colors: Array.isArray(participant.pearPairing.analysis.colors) ? participant.pearPairing.analysis.colors.map(String).slice(0, 8) : [],
+        composition: Array.isArray(participant.pearPairing.analysis.composition) ? participant.pearPairing.analysis.composition.map(String).slice(0, 8) : [],
+        mood: String(participant.pearPairing.analysis.mood || '').trim(),
+        context: Array.isArray(participant.pearPairing.analysis.context) ? participant.pearPairing.analysis.context.map(String).slice(0, 8) : [],
+        concept: Array.isArray(participant.pearPairing.analysis.concept) ? participant.pearPairing.analysis.concept.map(String).slice(0, 8) : [],
+      } : null,
+      candidates: Array.isArray(participant.pearPairing.candidates) ? participant.pearPairing.candidates.slice(0, 5).map((candidate) => ({
+        id: String(candidate?.id || '').trim(),
+        title: String(candidate?.title || '').trim(),
+        artist: String(candidate?.artist || '').trim(),
+        year: String(candidate?.year || '').trim(),
+        imageUrl: String(candidate?.imageUrl || '').trim(),
+        sourceUrl: String(candidate?.sourceUrl || '').trim(),
+        sourceName: String(candidate?.sourceName || '').trim(),
+        reason: String(candidate?.reason || '').trim(),
+        rejected: candidate?.rejected === true,
+      })) : [],
+      finalArtwork: participant.pearPairing.finalArtwork && typeof participant.pearPairing.finalArtwork === 'object' ? {
+        title: String(participant.pearPairing.finalArtwork.title || '').trim(),
+        artist: String(participant.pearPairing.finalArtwork.artist || '').trim(),
+        year: String(participant.pearPairing.finalArtwork.year || '').trim(),
+        imageUrl: String(participant.pearPairing.finalArtwork.imageUrl || '').trim(),
+        sourceUrl: String(participant.pearPairing.finalArtwork.sourceUrl || '').trim(),
+        sourceName: String(participant.pearPairing.finalArtwork.sourceName || '').trim(),
+      } : null,
+      connection: String(participant.pearPairing.connection || '').trim(),
+      statement: String(participant.pearPairing.statement || '').trim(),
+      keywords: Array.isArray(participant.pearPairing.keywords) ? participant.pearPairing.keywords.map(String).slice(0, 5) : [],
+      error: String(participant.pearPairing.error || '').trim(),
+      createdAt: participant.pearPairing.createdAt || nowIso(),
+      updatedAt: participant.pearPairing.updatedAt || participant.pearPairing.createdAt || nowIso(),
+    }
+    : null;
   return cloneParticipant({
     participantId,
     nickname: participant?.nickname ?? null,
@@ -163,6 +217,7 @@ export function normalizeParticipant(participantId, participant) {
         updatedAt: selection?.updatedAt || selection?.createdAt || nowIso(),
       }]))
       : {},
+    pearPairing,
     joinedAt: participant?.joinedAt || nowIso(),
     lastSeenAt: participant?.lastSeenAt || nowIso(),
   });
@@ -209,6 +264,9 @@ export function normalizeSession(session) {
       questionId: session.stage?.questionId || null,
       view: session.stage?.view || null,
       participantId: session.stage?.participantId || null,
+      pearParticipantId: session.stage?.pearParticipantId || null,
+      pearPhase: session.stage?.pearPhase || 'idle',
+      pearView: session.stage?.pearView || 'case',
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),
       fitMode: session.stage?.fitMode || 'fit',

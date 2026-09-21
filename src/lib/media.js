@@ -32,6 +32,7 @@ export async function uploadParticipantPhoto(sessionId, id, file, metadata = {})
     action: 'sign-participant-upload',
     sessionId,
     assetId: id,
+    activity: metadata.activity || 'grape',
     contentType: file.type,
     size: file.size,
   }, user);

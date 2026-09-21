@@ -155,7 +155,8 @@ export default async function handler(request) {
       const sessionId = safePart(input.sessionId, 'session');
       const participantId = safePart(user.sub, 'participant');
       const assetId = safePart(input.assetId, 'grape');
-      const key = `sessions/${sessionId}/grape/${participantId}/${assetId}/photo.jpg`;
+      const activity = ['grape', 'pear'].includes(input.activity) ? input.activity : 'grape';
+      const key = `sessions/${sessionId}/${activity}/${participantId}/${assetId}/photo.jpg`;
       const cacheControl = 'public,max-age=31536000,immutable';
       const command = new PutObjectCommand({ Bucket: required('R2_BUCKET_NAME'), Key: key, ContentType: 'image/jpeg', CacheControl: cacheControl });
       const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 300 });

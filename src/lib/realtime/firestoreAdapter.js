@@ -140,6 +140,7 @@ function fromParticipantDoc(participantId, data) {
     nickname: data.nickname,
     avatar: data.avatar || null,
     grapeSelections: data.grapeSelections || {},
+    pearPairing: data.pearPairing || null,
     joinedAt: toIso(data.joinedAt),
     lastSeenAt: toIso(data.lastSeenAt),
   });
@@ -912,6 +913,7 @@ const firestoreAdapter = {
     if (Object.prototype.hasOwnProperty.call(data, 'nickname')) participantPatch.nickname = data.nickname;
     if (Object.prototype.hasOwnProperty.call(data, 'avatar')) participantPatch.avatar = data.avatar;
     if (Object.prototype.hasOwnProperty.call(data, 'grapeSelections')) participantPatch.grapeSelections = data.grapeSelections;
+    if (Object.prototype.hasOwnProperty.call(data, 'pearPairing')) participantPatch.pearPairing = data.pearPairing;
     if (data.joinedAt) participantPatch.joinedAt = data.joinedAt;
     else if (!participantCache.get(sessionId)?.some((item) => item.participantId === participantId)) participantPatch.joinedAt = serverTimestamp();
     await setDoc(
@@ -922,6 +924,7 @@ const firestoreAdapter = {
     return normalizeParticipant(participantId, {
       ...data,
       participantId,
+      pearPairing: data.pearPairing || null,
       joinedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
     });

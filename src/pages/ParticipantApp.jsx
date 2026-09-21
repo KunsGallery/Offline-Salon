@@ -15,8 +15,10 @@ import { safeJoin } from '../lib/format';
 import { ArtworkParticipantView, ImageParticipantView, PdfParticipantView, ResultGalleryParticipantView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeParticipantView } from '../components/activities/ExhibitionGrapeViews';
+import { PearPlayParticipantView } from '../components/activities/PearPlayViews';
 import { uploadParticipantPhoto } from '../lib/media';
 import { prepareParticipantPhoto } from '../lib/participantPhoto';
+import { requestPearPairing } from '../lib/pearPlay';
 import { hasSessionModule } from '../lib/sessionModules';
 
 function storageKey(sessionId, key) {
@@ -278,6 +280,20 @@ export default function ParticipantApp() {
     await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, { nickname, grapeSelections }));
   };
 
+  const handleSavePearPairing = async (file) => {
+    const pairingId = createId('pear');
+    const uploaded = await uploadParticipantPhoto(sessionId, pairingId, file, { activity: 'pear' });
+    const pairing = await requestPearPairing({ sessionId, participantId, photoUrl: uploaded.url });
+    await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, {
+      nickname,
+      pearPairing: {
+        ...pairing,
+        photoUrl: uploaded.url,
+        photoPath: uploaded.path || null,
+      },
+    }));
+  };
+
   if (!participantId || !nickname) {
     return (
       <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
@@ -288,6 +304,10 @@ export default function ParticipantApp() {
 
   if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
     return <div style={accentStyle}><ExhibitionGrapeParticipantView session={session} participant={participant || { participantId, nickname, grapeSelections: {} }} onSaveSelection={handleSaveGrapeSelection} /></div>;
+  }
+
+  if (session.stage?.mode === 'pear-play' && hasSessionModule(session, 'pear-play')) {
+    return <div style={accentStyle}><PearPlayParticipantView session={session} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} /></div>;
   }
 
   if (session.stage?.mode === 'pdf') {

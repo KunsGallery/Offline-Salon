@@ -11,6 +11,7 @@ import { useSession } from '../hooks/useSession';
 import { ArtworkHostView, ImageHostView, PdfHostView, ResultGalleryHostView } from '../components/media/LiveMediaViews';
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeHostView } from '../components/activities/ExhibitionGrapeViews';
+import { PearPlayHostView } from '../components/activities/PearPlayViews';
 import { hasSessionModule } from '../lib/sessionModules';
 
 export default function HostDisplay() {
@@ -127,6 +128,10 @@ export default function HostDisplay() {
 
   if (session.stage?.mode === 'exhibition-grape' && hasSessionModule(session, 'exhibition-grape')) {
     return <div style={sessionThemeStyle(session)}><ExhibitionGrapeHostView session={session} participants={participants} /></div>;
+  }
+
+  if (session.stage?.mode === 'pear-play' && hasSessionModule(session, 'pear-play')) {
+    return <div style={sessionThemeStyle(session)}><PearPlayHostView session={session} participants={participants} /></div>;
   }
 
   if (session.stage?.mode === 'lobby' || !activeQuestion) {
