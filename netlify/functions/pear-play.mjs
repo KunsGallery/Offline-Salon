@@ -113,6 +113,20 @@ function normalizePairing(value, photoUrl) {
   };
 }
 
+function openAiHeaders(apiKey) {
+  return { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' };
+}
+
+async function openAiJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  return { response, data };
+}
+
+function failedOpenAiResponse(data) {
+  return data?.error?.message || data?.incomplete_details?.reason || 'PEAR PLAY AI 요청에 실패했습니다.';
+}
+
 export default async function handler(request) {
   const origin = allowedOrigin(request);
   if (!origin) return json(403, { ok: false, error: '허용되지 않은 출처입니다.', code: 'ORIGIN_DENIED' }, 'null');
@@ -121,16 +135,34 @@ export default async function handler(request) {
   try {
     await requireFirebaseUser(request);
     const input = await request.json().catch(() => ({}));
-    const photoUrl = String(input.photoUrl || '').trim();
-    if (!photoUrl || !/^https:\/\//i.test(photoUrl)) return json(400, { ok: false, error: '업로드된 사진 주소가 필요합니다.', code: 'INVALID_PHOTO_URL' }, origin);
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) return json(503, { ok: false, error: 'PEAR PLAY AI가 아직 연결되지 않았습니다. 운영자에게 OPENAI_API_KEY 설정을 요청해 주세요.', code: 'AI_NOT_CONFIGURED' }, origin);
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const action = String(input.action || 'start').trim().toLowerCase();
+    if (action === 'poll') {
+      const responseId = String(input.responseId || '').trim();
+      if (!responseId) return json(400, { ok: false, error: 'AI 분석 작업 ID가 필요합니다.', code: 'INVALID_RESPONSE_ID' }, origin);
+      const { response, data } = await openAiJson(`https://api.openai.com/v1/responses/${encodeURIComponent(responseId)}`, {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      if (!response.ok) return json(response.status || 502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED' }, origin);
+      if (data.status === 'queued' || data.status === 'in_progress') return json(200, { ok: true, status: 'pending', responseId }, origin);
+      if (data.status !== 'completed') return json(502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED', status: data.status || 'unknown' }, origin);
+      const photoUrl = String(input.photoUrl || '').trim();
+      const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
+      return json(200, { ok: true, status: 'completed', responseId, pairing }, origin);
+    }
+
+    if (action !== 'start') return json(400, { ok: false, error: '지원하지 않는 AI 작업입니다.', code: 'INVALID_ACTION' }, origin);
+    const photoUrl = String(input.photoUrl || '').trim();
+    if (!photoUrl || !/^https:\/\//i.test(photoUrl)) return json(400, { ok: false, error: '업로드된 사진 주소가 필요합니다.', code: 'INVALID_PHOTO_URL' }, origin);
+
+    const { response, data } = await openAiJson('https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      headers: openAiHeaders(apiKey),
       body: JSON.stringify({
         model: process.env.PEAR_PLAY_MODEL || 'gpt-5.6',
+        background: true,
         tools: [{ type: 'web_search' }],
         input: [{
           role: 'user',
@@ -150,10 +182,12 @@ export default async function handler(request) {
         }],
       }),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return json(response.status || 502, { ok: false, error: data.error?.message || 'PEAR PLAY AI 요청에 실패했습니다.', code: 'AI_REQUEST_FAILED' }, origin);
-    const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
-    return json(200, { ok: true, pairing }, origin);
+    if (!response.ok) return json(response.status || 502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED' }, origin);
+    if (data.status === 'completed') {
+      const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
+      return json(200, { ok: true, status: 'completed', responseId: data.id, pairing }, origin);
+    }
+    return json(200, { ok: true, status: 'pending', responseId: data.id }, origin);
   } catch (error) {
     return json(error.status || 500, { ok: false, error: error.message || 'PEAR PLAY 분석에 실패했습니다.', code: error.code || 'PEAR_PLAY_FAILED' }, origin);
   }
