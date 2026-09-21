@@ -314,7 +314,7 @@ export default function ParticipantApp() {
   }
 
   if (hasSessionModule(session, 'pear-play') && (session.stage?.mode === 'pear-play' || (session.stage?.mode === 'lobby' && !currentQuestion))) {
-    return <div style={accentStyle}><PearPlayParticipantView session={session} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} /></div>;
+    return <div style={accentStyle}><PearPlayParticipantView session={session} participants={participants} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} /></div>;
   }
 
   if (session.stage?.mode === 'pdf') {
