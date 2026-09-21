@@ -66,14 +66,14 @@ function EnvelopeScene({ preview, status = 'idle' }) {
   const accepted = status === 'accepted';
   return <section className={`pear-envelope-scene ${accepted ? 'is-accepted' : ''}`} aria-live="polite">
     <div className="pear-envelope-visual">
-      <img src={accepted ? '/pear-play/envelope-close.webp' : '/pear-play/envelope-open.webp'} alt="Rienzi 탐정사무소 편지 봉투" />
+      <img src={accepted ? '/pear-play/envelope-close-original.webp' : '/pear-play/envelope-open-original.webp'} alt="Rienzi 탐정사무소 편지 봉투" />
       {!accepted && preview ? <div className="pear-envelope-photo"><img src={preview} alt="봉투에 넣을 사건 사진" /><span>CASE PHOTO</span></div> : null}
       {!accepted && !preview ? <div className="pear-envelope-logo" aria-hidden="true"><strong>UNFRAME</strong><span>PEAR PLAY · PRIVATE CASE</span></div> : null}
     </div>
     <div className="pear-envelope-copy">
       <span className="pear-case-label">{accepted ? 'CASE FILE ACCEPTED' : status === 'uploading' ? 'SEALING EVIDENCE' : 'THE RIENZI AGENCY'}</span>
       <h2>{accepted ? '사진이 사건 파일로 접수되었습니다.' : status === 'uploading' ? '봉인을 확인하는 중입니다.' : preview ? '이 장면을 사건 봉투에 넣을까요?' : '당신의 일상을 사건으로 보내주세요.'}</h2>
-      <p>{accepted ? '조수 Wagson이 조사실의 사건 보드에 자료를 등록했습니다.' : status === 'uploading' ? '사진을 안전하게 사건 보관함으로 보내고 있습니다.' : '사진 한 장이면 충분합니다. 사소한 장면일수록 단서가 많습니다.'}</p>
+      <p>{accepted ? '조수가 조사실의 사건 보드에 자료를 등록했습니다.' : status === 'uploading' ? '사진을 안전하게 사건 보관함으로 보내고 있습니다.' : '사진 한 장이면 충분합니다. 사소한 장면일수록 단서가 많습니다.'}</p>
     </div>
   </section>;
 }
@@ -172,7 +172,7 @@ function EvidenceWall({ participants = [], currentId = '' }) {
     {participants.map((participant, index) => {
       const slot = EVIDENCE_SLOTS[index % EVIDENCE_SLOTS.length];
       const active = participant.participantId === currentId;
-      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={`${participant.participantId || 'evidence'}-${index}`} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg` }}>
+      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={`${participant.participantId || 'evidence'}-${index}`} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg`, '--evidence-delay': `${index * 0.42}s` }}>
         <span className="pear-evidence-pin" aria-hidden="true" />
         <img src={participant.pearPairing.photoUrl} alt={`${participant.nickname || '익명'}의 사건 사진`} />
         <footer><b>CASE {String(index + 1).padStart(2, '0')}</b><span>{participant.nickname || '익명'}</span></footer>
@@ -181,15 +181,11 @@ function EvidenceWall({ participants = [], currentId = '' }) {
   </div>;
 }
 
-function HostCaseInspector({ current, pairing, phase, showArtwork }) {
-  return <aside className="pear-case-inspector">
-    <header><span className="pear-case-label">{phaseLabel(phase)}</span><strong>CASE {current ? current.nickname || 'ANONYMOUS' : '—'}</strong></header>
-    <div className="pear-inspector-rule" />
-    {phase === 'investigating' ? <HostInvestigationView /> : null}
-    {phase === 'found' ? <HostFoundView pairing={pairing} /> : null}
-    {showArtwork ? <div className="pear-host-reveal"><div className="pear-reveal-image"><img src={pairing.finalArtwork?.imageUrl} alt={`${pairing.finalArtwork?.artist}의 ${pairing.finalArtwork?.title}`} /></div><ArtworkCaption artwork={pairing.finalArtwork} /><div className="pear-reveal-connection"><span>{phase === 'connection' ? 'WHY THIS PAIR?' : 'THE PAIR'}</span><p>{pairing.connection}</p>{phase === 'connection' ? <strong>{pairing.statement}</strong> : null}</div></div> : null}
-    {phase === 'photo' ? <p className="pear-inspector-note">조수 Wagson이 접수된 사진을 사건 보드에 정리했습니다. 리모컨에서 사진을 선택하고 추리를 시작하세요.</p> : null}
-  </aside>;
+function HostCaseState({ current, pairing, phase, showArtwork }) {
+  if (showArtwork) return <section className="pear-host-reveal-stage"><div className="pear-reveal-image"><img src={pairing.finalArtwork?.imageUrl} alt={`${pairing.finalArtwork?.artist}의 ${pairing.finalArtwork?.title}`} /></div><ArtworkCaption artwork={pairing.finalArtwork} /><div className="pear-reveal-connection"><span>{phase === 'connection' ? 'WHY THIS PAIR?' : 'THE PAIR'}</span><p>{pairing.connection}</p>{phase === 'connection' ? <strong>{pairing.statement}</strong> : null}</div></section>;
+  if (phase === 'investigating') return <section className="pear-host-state pear-host-state-investigating"><HostInvestigationView /></section>;
+  if (phase === 'found') return <section className="pear-host-state pear-host-state-found"><HostFoundView pairing={pairing} /></section>;
+  return <section className="pear-host-state pear-host-state-photo"><span className="pear-case-label">CASE FILE RECEIVED</span><p>조수가 사진을 보드에 꽂았습니다. 리모컨에서 추리를 시작하세요.</p></section>;
 }
 
 export function PearPlayHostView({ session, participants = [] }) {
@@ -199,10 +195,10 @@ export function PearPlayHostView({ session, participants = [] }) {
   if (view === 'board') return <main className="pear-host pear-host-board"><div className="pear-host-vignette" aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · ARCHIVE</span><h1>CASE BOARD</h1><p>해결된 사건과 사진의 연결을 기록합니다.</p></div><strong>{completed.length} CASES</strong></header>{completed.length ? <section className="pear-case-board">{completed.map((participant, index) => <article key={participant.participantId}><header><SalonAvatar avatar={participant.avatar} compact /><div><span>CASE {String(index + 1).padStart(2, '0')}</span><h2>{participant.nickname || '익명'}</h2></div></header><div className="pear-board-pair"><img src={participant.pearPairing.photoUrl} alt="" /><b>×</b>{participant.pearPairing.finalArtwork?.imageUrl ? <img src={participant.pearPairing.finalArtwork.imageUrl} alt="" /> : <div />}</div><strong>{participant.pearPairing.finalArtwork?.title || 'Pair 확인 중'}</strong><p>{participant.pearPairing.keywords?.join(' · ')}</p></article>)}</section> : <div className="pear-host-empty"><strong>CASE BOARD</strong><p>아직 해결된 사건이 없습니다.</p></div>}</main>;
   const current = submitted.find((participant) => participant.participantId === session.stage?.pearParticipantId) || submitted[0];
   const pairing = current?.pearPairing;
-  if (!current || !pairing) return <main className="pear-host pear-host-empty"><div className="pear-host-vignette" aria-hidden="true" /><EvidenceWall participants={submitted} /><div className="pear-empty-copy"><span className="pear-case-label">THE RIENZI AGENCY · INTAKE</span><h1>다음 사건을<br />기다리고 있어요.</h1><p>참여자가 사진을 제출하면 조수 Wagson이 사건 보드에 등록합니다.</p></div></main>;
+  if (!current || !pairing) return <main className="pear-host pear-host-empty"><div className="pear-host-vignette" aria-hidden="true" /><EvidenceWall participants={submitted} /><div className="pear-empty-copy"><span className="pear-case-label">THE RIENZI AGENCY · INTAKE</span><h1>다음 사건을<br />기다리고 있어요.</h1><p>참여자가 사진을 제출하면 조수가 사건 보드에 등록합니다.</p></div></main>;
   const phase = session.stage?.pearPhase || 'photo';
   const showArtwork = phase === 'revealed' || phase === 'connection';
-  return <main className={`pear-host pear-host-case phase-${phase}`}><div className="pear-host-vignette" aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · {phaseLabel(phase)}</span><h1>{current.nickname || '익명'}의 사건</h1><p>조수 Wagson이 현장 사진을 사건 보드에 정리했습니다.</p></div><strong>CASE {String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}</strong></header><EvidenceWall participants={submitted} currentId={current.participantId} /><HostCaseInspector current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} /></main>;
+  return <main className={`pear-host pear-host-case phase-${phase}`}><div className="pear-host-vignette" aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · {phaseLabel(phase)}</span><h1>{current.nickname || '익명'}의 사건</h1><p>조수가 현장 사진을 사건 보드에 정리했습니다.</p></div><strong>CASE {String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}</strong></header><EvidenceWall participants={submitted} currentId={current.participantId} /><HostCaseState current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} /></main>;
 }
 
 export function PearPlayRemotePanel({ session, participants = [], busy = false, run, onStartInvestigation }) {
