@@ -18,7 +18,6 @@ import { ExhibitionGrapeParticipantView } from '../components/activities/Exhibit
 import { PearPlayParticipantView } from '../components/activities/PearPlayViews';
 import { uploadParticipantPhoto } from '../lib/media';
 import { prepareParticipantPhoto } from '../lib/participantPhoto';
-import { requestPearPairing } from '../lib/pearPlay';
 import { hasSessionModule } from '../lib/sessionModules';
 
 function storageKey(sessionId, key) {
@@ -283,13 +282,21 @@ export default function ParticipantApp() {
   const handleSavePearPairing = async (file) => {
     const pairingId = createId('pear');
     const uploaded = await uploadParticipantPhoto(sessionId, pairingId, file, { activity: 'pear' });
-    const pairing = await requestPearPairing({ sessionId, participantId, photoUrl: uploaded.url });
     await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, {
       nickname,
       pearPairing: {
-        ...pairing,
+        status: 'uploaded',
         photoUrl: uploaded.url,
         photoPath: uploaded.path || null,
+        analysis: null,
+        candidates: [],
+        finalArtwork: null,
+        connection: '',
+        statement: '',
+        keywords: [],
+        error: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     }));
   };

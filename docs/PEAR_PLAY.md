@@ -4,12 +4,13 @@
 
 1. 관리자 세션 편집에서 `PEAR PLAY` 모듈을 선택하고 저장합니다.
 2. 리모컨에서 `PEAR PLAY` 화면을 엽니다.
-3. 참가자는 QR로 들어와 사진 한 장을 업로드하고 `사건 수사 시작`을 누릅니다.
-4. 사진은 R2의 `sessions/{sessionId}/pear/...` 경로에 저장됩니다.
-5. Netlify Function `pear-play`가 사진을 분석하고 웹 검색으로 실제 작품 후보를 확인합니다.
-6. 참가자의 Pair 결과는 Firestore `sessions/{sessionId}/participants/{participantId}.pearPairing`에 저장됩니다.
-7. 리모컨에서 `사건 열기` 후 `SCENE INSPECTION`, `COMPARING SUSPECTS`, `FINAL DEDUCTION`, `WHY THIS PAIR?` 순서로 호스트 화면을 진행합니다.
-8. `CASE BOARD`에서 해결된 모든 Pair를 한 화면에 모읍니다.
+3. 참가자는 QR로 들어와 사진 한 장을 업로드합니다.
+4. 사진은 R2의 `sessions/{sessionId}/pear/...` 경로에 저장되고 호스트 대기 목록에 나타납니다.
+5. 호스트가 사진을 선택하면 호스트 화면에 사진이 크게 열립니다.
+6. 리모컨에서 `토끼 탐정의 추리 시작`을 눌러야 Netlify Function `pear-play`가 사진을 분석하고 웹 검색으로 실제 작품 후보를 확인합니다.
+7. 분석 결과는 Firestore `sessions/{sessionId}/participants/{participantId}.pearPairing`에 저장됩니다.
+8. 호스트는 `작품 공개하기`를 눌러야 작품 이미지와 작가, 제목, 연도, 크기, 재료 캡션을 공개할 수 있습니다.
+9. `CASE BOARD`에서 공개된 모든 Pair를 한 화면에 모읍니다.
 
 ## Netlify 환경변수
 
@@ -17,7 +18,7 @@ Netlify의 `Offline Salon` 사이트에서 **Site configuration → Environment 
 
 ```text
 OPENAI_API_KEY=sk-...
-PEAR_PLAY_MODEL=gpt-5
+PEAR_PLAY_MODEL=gpt-5.6
 PEAR_PLAY_ALLOWED_ORIGINS=https://salon.unframe.kr
 ```
 

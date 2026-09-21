@@ -11,6 +11,7 @@ import { PdfPageCanvas, PdfZoomSelect } from '../components/media/LiveMediaViews
 import { useParticipants } from '../hooks/useParticipants';
 import { ExhibitionGrapeRemotePanel } from '../components/activities/ExhibitionGrapeViews';
 import { PearPlayRemotePanel } from '../components/activities/PearPlayViews';
+import { requestPearPairing } from '../lib/pearPlay';
 import { hasSessionModule } from '../lib/sessionModules';
 
 export default function RemoteControl() {
@@ -71,6 +72,31 @@ export default function RemoteControl() {
   const setView = (patch) => realtime.updateSession(session.id, { stage: { ...stage, ...patch } });
   const showLobby = () => realtime.updateSession(session.id, { currentQuestionId: null, stage: { mode: 'lobby', page: 1, blackout: false } });
   const showGallery = () => realtime.updateSession(session.id, { currentQuestionId: null, stage: { mode: 'gallery', page: 1, blackout: false } });
+  const startPearInvestigation = async (participant) => {
+    const selectedPairing = participant?.pearPairing;
+    if (!participant || !selectedPairing?.photoUrl) throw new Error('먼저 조사할 참가자 사진을 선택해 주세요.');
+    const investigatingStage = { ...stage, mode: 'pear-play', pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', blackout: false };
+    await realtime.updateSession(session.id, { currentQuestionId: null, stage: investigatingStage, status: 'live' });
+    try {
+      const pairing = await requestPearPairing({ sessionId, participantId: participant.participantId, photoUrl: selectedPairing.photoUrl });
+      await realtime.upsertParticipant(session.id, participant.participantId, {
+        nickname: participant.nickname,
+        pearPairing: {
+          ...pairing,
+          photoUrl: selectedPairing.photoUrl,
+          photoPath: selectedPairing.photoPath || null,
+        },
+      });
+      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'found' }, status: 'live' });
+    } catch (reason) {
+      await realtime.upsertParticipant(session.id, participant.participantId, {
+        nickname: participant.nickname,
+        pearPairing: { ...selectedPairing, status: 'error', error: reason?.message || '추리에 실패했습니다.', updatedAt: new Date().toISOString() },
+      });
+      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'photo' }, status: 'live' });
+      throw reason;
+    }
+  };
   const adoptTitle = async (response) => {
     if (!artwork || !response) return;
     const adoptedTitle = Array.isArray(response.value) ? response.value.join(' ') : String(response.value || '').trim();
@@ -124,7 +150,7 @@ export default function RemoteControl() {
     </section>
 
     {hasSessionModule(session, 'exhibition-grape') ? <ExhibitionGrapeRemotePanel session={session} participants={participants} busy={busy} run={run} /> : null}
-    {hasSessionModule(session, 'pear-play') ? <PearPlayRemotePanel session={session} participants={participants} busy={busy} run={run} /> : null}
+    {hasSessionModule(session, 'pear-play') ? <PearPlayRemotePanel session={session} participants={participants} busy={busy} run={run} onStartInvestigation={startPearInvestigation} /> : null}
 
     {artworks.length ? <section className="remote-assets"><div><p className="eyebrow">ARTWORKS</p><h2>작품 선택</h2></div>{reviewArtwork ? <section className="remote-title-archive" aria-label={`${reviewArtwork.adoptedTitle || reviewArtwork.title || '작품'} 제목 기록`}><header><div><span>제목 기록</span><h3>{reviewArtwork.adoptedTitle || reviewArtwork.title || '제목 미정'}</h3></div><button type="button" onClick={() => setReviewArtworkId(null)} aria-label="제목 기록 닫기">닫기</button></header>{reviewArtwork.adoptedTitle ? <p className="remote-title-adopted"><span>최종 채택</span><strong>{reviewArtwork.adoptedTitle}</strong></p> : null}<div className="remote-title-archive-summary"><strong>{archivedReviewResponses.length}</strong><span>개의 제출 제목 전체 기록입니다.</span></div>{reviewLoading ? <p className="remote-title-archive-state">기록을 불러오는 중…</p> : reviewError ? <p className="remote-title-archive-state error">기록을 불러오지 못했습니다. 잠시 후 다시 열어주세요.</p> : !reviewQuestionIds.size ? <p className="remote-title-archive-state">이 작품에 연결된 제목 활동 기록이 없습니다.</p> : archivedReviewResponses.length ? <ol>{archivedReviewResponses.map((response) => {
       const responseTitle = Array.isArray(response.value) ? response.value.join(' ') : response.value;

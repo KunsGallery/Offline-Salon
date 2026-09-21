@@ -74,6 +74,8 @@ function normalizePairing(value, photoUrl) {
     title: String(candidate?.title || ''),
     artist: String(candidate?.artist || ''),
     year: String(candidate?.year || ''),
+    dimensions: String(candidate?.dimensions || ''),
+    materials: String(candidate?.materials || ''),
     imageUrl: String(candidate?.imageUrl || ''),
     sourceUrl: String(candidate?.sourceUrl || ''),
     sourceName: String(candidate?.sourceName || ''),
@@ -97,6 +99,8 @@ function normalizePairing(value, photoUrl) {
       title: String(finalArtwork.title || ''),
       artist: String(finalArtwork.artist || ''),
       year: String(finalArtwork.year || ''),
+      dimensions: String(finalArtwork.dimensions || ''),
+      materials: String(finalArtwork.materials || ''),
       imageUrl: String(finalArtwork.imageUrl || ''),
       sourceUrl: String(finalArtwork.sourceUrl || ''),
       sourceName: String(finalArtwork.sourceName || ''),
@@ -126,16 +130,16 @@ export default async function handler(request) {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: process.env.PEAR_PLAY_MODEL || 'gpt-5',
+        model: process.env.PEAR_PLAY_MODEL || 'gpt-5.6',
         tools: [{ type: 'web_search' }],
         input: [{
           role: 'user',
           content: [
-            { type: 'input_text', text: `당신은 Detective P입니다. 아래 사진을 실제 존재하는 미술 작품과 연결하는 PEAR PLAY 사건을 수사하세요. 이미지 분석, 웹 검색, 작품 정보 검증을 모두 수행하세요. 존재하지 않는 작품이나 확인되지 않은 이미지 URL을 만들지 마세요. 이미지 URL과 sourceUrl은 검색 결과에서 확인된 공개 URL만 사용하세요. 반드시 아래 JSON 하나만 출력하세요. 한국어로 작성하되 분석 태그는 짧은 영어도 허용합니다.
+            { type: 'input_text', text: `당신은 토끼 탐정입니다. 아래 사진을 실제 존재하는 미술 작품과 연결하는 PEAR PLAY 사건을 수사하세요. 먼저 이미지의 사물, 색, 구도, 분위기와 맥락을 세심하게 이해하고, 그 단서에서 출발해 작품을 추론하세요. 웹 검색으로 작품의 존재, 작가, 제목, 연도, 크기, 재료/기법, 이미지와 출처를 검증하세요. 존재하지 않는 작품이나 확인되지 않은 이미지 URL을 만들지 마세요. 이미지 URL과 sourceUrl은 검색 결과에서 확인된 공개 URL만 사용하세요. 반드시 아래 JSON 하나만 출력하세요. 한국어로 작성하되 분석 태그는 짧은 영어도 허용합니다.
 {
   "analysis": {"objects": [], "colors": [], "composition": [], "mood": "", "context": [], "concept": []},
-  "candidates": [{"id":"", "title":"", "artist":"", "year":"", "imageUrl":"", "sourceUrl":"", "sourceName":"", "reason":"", "rejected":false}],
-  "finalArtwork": {"title":"", "artist":"", "year":"", "imageUrl":"", "sourceUrl":"", "sourceName":""},
+  "candidates": [{"id":"", "title":"", "artist":"", "year":"", "dimensions":"", "materials":"", "imageUrl":"", "sourceUrl":"", "sourceName":"", "reason":"", "rejected":false}],
+  "finalArtwork": {"title":"", "artist":"", "year":"", "dimensions":"", "materials":"", "imageUrl":"", "sourceUrl":"", "sourceName":""},
   "connection":"사진과 작품의 연결 이유를 2~4문장으로 설명",
   "statement":"이 사진에 맞는 한 문장",
   "keywords":["", "", ""]

@@ -33,7 +33,7 @@
  * @property {string} participantId
  * @property {string|null} nickname
  * @property {Record<string, {id: string, title: string, venue: string, photoUrl: string, photoPath: string|null, status: 'want'|'expecting'|'seen', rating: number, referenceId: string, region: string, monthTags: number[], artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], source: 'participant'|'reference', createdAt: string, updatedAt: string}>} grapeSelections
- * @property {{status: 'ready'|'analyzing'|'error', photoUrl: string, photoPath: string|null, analysis: Object|null, candidates: Object[], finalArtwork: Object|null, connection: string, statement: string, keywords: string[], error: string, createdAt: string, updatedAt: string}|null} pearPairing
+ * @property {{status: 'uploaded'|'ready'|'analyzing'|'error', photoUrl: string, photoPath: string|null, analysis: Object|null, candidates: Object[], finalArtwork: Object|null, connection: string, statement: string, keywords: string[], error: string, createdAt: string, updatedAt: string}|null} pearPairing
  * @property {string} joinedAt
  * @property {string} lastSeenAt
  *

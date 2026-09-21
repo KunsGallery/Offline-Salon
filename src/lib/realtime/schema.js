@@ -153,7 +153,7 @@ export function normalizeResponse(response) {
 export function normalizeParticipant(participantId, participant) {
   const pearPairing = participant?.pearPairing && typeof participant.pearPairing === 'object'
     ? {
-      status: ['ready', 'analyzing', 'error'].includes(participant.pearPairing.status) ? participant.pearPairing.status : 'ready',
+      status: ['uploaded', 'ready', 'analyzing', 'error'].includes(participant.pearPairing.status) ? participant.pearPairing.status : 'ready',
       photoUrl: String(participant.pearPairing.photoUrl || '').trim(),
       photoPath: participant.pearPairing.photoPath || null,
       analysis: participant.pearPairing.analysis && typeof participant.pearPairing.analysis === 'object' ? {
@@ -179,6 +179,8 @@ export function normalizeParticipant(participantId, participant) {
         title: String(participant.pearPairing.finalArtwork.title || '').trim(),
         artist: String(participant.pearPairing.finalArtwork.artist || '').trim(),
         year: String(participant.pearPairing.finalArtwork.year || '').trim(),
+        dimensions: String(participant.pearPairing.finalArtwork.dimensions || '').trim(),
+        materials: String(participant.pearPairing.finalArtwork.materials || '').trim(),
         imageUrl: String(participant.pearPairing.finalArtwork.imageUrl || '').trim(),
         sourceUrl: String(participant.pearPairing.finalArtwork.sourceUrl || '').trim(),
         sourceName: String(participant.pearPairing.finalArtwork.sourceName || '').trim(),
