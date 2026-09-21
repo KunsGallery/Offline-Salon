@@ -22,8 +22,9 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (error || !user) {
-    return <Navigate to="/login" replace state={{ from: location, authError: error?.message || null }} />;
+  if (error || !user || user.isAnonymous) {
+    const authError = error?.message || (user?.isAnonymous ? '관리자 화면은 Google 관리자 로그인 후 이용할 수 있습니다.' : null);
+    return <Navigate to="/login" replace state={{ from: location, authError }} />;
   }
 
   return children;

@@ -95,7 +95,7 @@ export async function logout() {
 }
 
 export function requireAdminUser() {
-  if (!auth?.currentUser) {
+  if (!auth?.currentUser || auth.currentUser.isAnonymous) {
     throw new Error('Admin authentication required.');
   }
   return auth.currentUser;
