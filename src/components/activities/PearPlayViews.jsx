@@ -188,17 +188,30 @@ function HostFoundView({ pairing }) {
 }
 
 function EvidenceWall({ participants = [], currentId = '' }) {
+  const evidenceDelayRef = useRef(new Map());
+  const firstPaint = evidenceDelayRef.current.size === 0;
+  let newEvidenceIndex = 0;
   if (!participants.length) return <div className="pear-evidence-wall pear-evidence-wall-empty"><span>WAITING FOR EVIDENCE</span><p>첫 번째 사건 사진을 기다리는 중입니다.</p></div>;
-  const latestSlot = EVIDENCE_SLOTS[(participants.length - 1) % EVIDENCE_SLOTS.length];
-  return <div className="pear-evidence-wall" key={`evidence-wall-${participants.length}`} aria-label="참여자 사건 사진 보드">
-    <img className="pear-pinning-paw" src="/pear-play/assistant-paw-pin-original.webp" alt="" aria-hidden="true" style={{ '--paw-x': `${latestSlot.x}%`, '--paw-y': `${latestSlot.y}%` }} />
+  return <div className="pear-evidence-wall" aria-label="참여자 사건 사진 보드">
     {participants.map((participant, index) => {
       const slot = EVIDENCE_SLOTS[index % EVIDENCE_SLOTS.length];
       const active = participant.participantId === currentId;
-      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={`${participant.participantId || 'evidence'}-${index}`} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg`, '--evidence-delay': `${index * 0.42}s` }}>
-        <span className="pear-evidence-pin" aria-hidden="true" />
-        <img src={participant.pearPairing.photoUrl} alt={`${participant.nickname || '익명'}의 사건 사진`} />
-        <footer><b>CASE {String(index + 1).padStart(2, '0')}</b><span>{participant.nickname || '익명'}</span></footer>
+      const evidenceId = participant.participantId || `evidence-${index}`;
+      if (!evidenceDelayRef.current.has(evidenceId)) {
+        evidenceDelayRef.current.set(evidenceId, firstPaint ? index * 1.35 : newEvidenceIndex * 1.35);
+        newEvidenceIndex += 1;
+      }
+      const evidenceDelay = evidenceDelayRef.current.get(evidenceId);
+      return <article className={`pear-evidence-note ${active ? 'is-active' : ''}`} key={evidenceId} style={{ '--evidence-x': `${slot.x}%`, '--evidence-y': `${slot.y}%`, '--evidence-rotate': `${slot.rotate}deg`, '--evidence-delay': `${evidenceDelay}s` }}>
+        <div className="pear-pinning-action" aria-hidden="true">
+          <img className="pear-pinning-paw" src="/pear-play/assistant-paw-pin-original.webp" alt="" />
+          <span className="pear-pinning-photo"><img src={participant.pearPairing.photoUrl} alt="" /></span>
+        </div>
+        <div className="pear-evidence-content">
+          <span className="pear-evidence-pin" aria-hidden="true" />
+          <img className="pear-evidence-photo" src={participant.pearPairing.photoUrl} alt={`${participant.nickname || '익명'}의 사건 사진`} />
+          <footer><b>CASE {String(index + 1).padStart(2, '0')}</b><span>{participant.nickname || '익명'}</span></footer>
+        </div>
       </article>;
     })}
   </div>;
