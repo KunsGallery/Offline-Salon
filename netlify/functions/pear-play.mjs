@@ -127,6 +127,12 @@ function failedOpenAiResponse(data) {
   return data?.error?.message || data?.incomplete_details?.reason || 'PEAR PLAY AI 요청에 실패했습니다.';
 }
 
+function investigationStep(data) {
+  const searches = (data?.output || []).filter((item) => item?.type === 'web_search_call');
+  if (!searches.length) return 'observing';
+  return searches.some((item) => item.status !== 'completed') ? 'searching' : 'verifying';
+}
+
 export default async function handler(request) {
   const origin = allowedOrigin(request);
   if (!origin) return json(403, { ok: false, error: '허용되지 않은 출처입니다.', code: 'ORIGIN_DENIED' }, 'null');
@@ -146,7 +152,7 @@ export default async function handler(request) {
         headers: { authorization: `Bearer ${apiKey}` },
       });
       if (!response.ok) return json(response.status || 502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED' }, origin);
-      if (data.status === 'queued' || data.status === 'in_progress') return json(200, { ok: true, status: 'pending', responseId }, origin);
+      if (data.status === 'queued' || data.status === 'in_progress') return json(200, { ok: true, status: 'pending', responseId, investigationStep: investigationStep(data) }, origin);
       if (data.status !== 'completed') return json(502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED', status: data.status || 'unknown' }, origin);
       const photoUrl = String(input.photoUrl || '').trim();
       const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
@@ -162,21 +168,22 @@ export default async function handler(request) {
       headers: openAiHeaders(apiKey),
       body: JSON.stringify({
         model: process.env.PEAR_PLAY_MODEL || 'gpt-5.6',
+        reasoning: { effort: process.env.PEAR_PLAY_REASONING_EFFORT || 'low' },
         background: true,
         tools: [{ type: 'web_search' }],
         input: [{
           role: 'user',
           content: [
-            { type: 'input_text', text: `당신은 토끼 탐정입니다. 아래 사진을 실제 존재하는 미술 작품과 연결하는 PEAR PLAY 사건을 수사하세요. 먼저 이미지의 사물, 색, 구도, 분위기와 맥락을 세심하게 이해하고, 그 단서에서 출발해 작품을 추론하세요. 웹 검색으로 작품의 존재, 작가, 제목, 연도, 크기, 재료/기법, 이미지와 출처를 검증하세요. 존재하지 않는 작품이나 확인되지 않은 이미지 URL을 만들지 마세요. 이미지 URL과 sourceUrl은 검색 결과에서 확인된 공개 URL만 사용하세요. 반드시 아래 JSON 하나만 출력하세요. 한국어로 작성하되 분석 태그는 짧은 영어도 허용합니다.
+            { type: 'input_text', text: `당신은 토끼 탐정입니다. 사진의 사물, 색, 구도, 분위기를 살펴 실제 미술 작품과 연결하세요. 웹 검색으로 작품의 존재와 작가, 제목, 연도, 크기, 재료, 공개 이미지와 출처를 확인하세요. 확인되지 않은 정보나 URL은 만들지 말고 빈 문자열로 남기세요. 검색은 관련성 높은 후보에 집중하고, 아래 JSON만 간결한 한국어로 출력하세요.
 {
   "analysis": {"objects": [], "colors": [], "composition": [], "mood": "", "context": [], "concept": []},
   "candidates": [{"id":"", "title":"", "artist":"", "year":"", "dimensions":"", "materials":"", "imageUrl":"", "sourceUrl":"", "sourceName":"", "reason":"", "rejected":false}],
   "finalArtwork": {"title":"", "artist":"", "year":"", "dimensions":"", "materials":"", "imageUrl":"", "sourceUrl":"", "sourceName":""},
-  "connection":"사진과 작품의 연결 이유를 2~4문장으로 설명",
+  "connection":"사진과 작품의 연결 이유를 1~2문장으로 설명",
   "statement":"이 사진에 맞는 한 문장",
   "keywords":["", "", ""]
 }
-후보는 2~4개, 최종 작품은 반드시 하나를 고르고, 후보 중 약한 연결은 rejected:true로 표시하세요.` },
+후보는 최대 2개. 검증된 최종 작품 하나만 선택하고 약한 연결은 rejected:true로 표시하세요.` },
             { type: 'input_image', image_url: photoUrl, detail: 'high' },
           ],
         }],
@@ -187,7 +194,7 @@ export default async function handler(request) {
       const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
       return json(200, { ok: true, status: 'completed', responseId: data.id, pairing }, origin);
     }
-    return json(200, { ok: true, status: 'pending', responseId: data.id }, origin);
+    return json(200, { ok: true, status: 'pending', responseId: data.id, investigationStep: investigationStep(data) }, origin);
   } catch (error) {
     return json(error.status || 500, { ok: false, error: error.message || 'PEAR PLAY 분석에 실패했습니다.', code: error.code || 'PEAR_PLAY_FAILED' }, origin);
   }

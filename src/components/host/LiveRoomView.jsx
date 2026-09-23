@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import QRJoinCard from './QRJoinCard';
 import LikeBurst from './LikeBurst';
+import SalonAvatar from '../participants/SalonAvatar';
 import { formatCompactTime, safeJoin } from '../../lib/format';
 
 const MAX_VISIBLE_SEATS = 10;
@@ -106,7 +107,7 @@ export default function LiveRoomView({ question, responses = [], participants = 
               >
                 {likesEnabled && burstById[response.id] ? <LikeBurst count={burstById[response.id]} /> : null}
                 <header>
-                  <span className="salon-seat-avatar">{getInitial(nickname)}</span>
+                  {participant?.avatar ? <SalonAvatar avatar={participant.avatar} compact /> : <span className="salon-seat-avatar">{getInitial(nickname)}</span>}
                   <div><strong>{nickname}</strong><small>{formatCompactTime(response.createdAt)}</small></div>
                   {likesEnabled ? <b className="salon-seat-likes">♥ {likes}</b> : null}
                 </header>

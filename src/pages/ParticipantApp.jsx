@@ -19,6 +19,8 @@ import { PearPlayParticipantView } from '../components/activities/PearPlayViews'
 import { uploadParticipantPhoto } from '../lib/media';
 import { prepareParticipantPhoto } from '../lib/participantPhoto';
 import { hasSessionModule } from '../lib/sessionModules';
+import { avatarForSession } from '../lib/avatar';
+import SalonAvatar from '../components/participants/SalonAvatar';
 
 function storageKey(sessionId, key) {
   return `offline-salon:${key}:${sessionId}`;
@@ -37,6 +39,14 @@ function writeStoredValue(key, value) {
     window.localStorage.setItem(key, value);
   } catch {
     // Storage can be unavailable in private mode or restrictive browsers.
+  }
+}
+
+function readStoredAvatar() {
+  try {
+    return JSON.parse(readStoredValue('offline-salon:avatar'));
+  } catch {
+    return null;
   }
 }
 
@@ -59,6 +69,7 @@ export default function ParticipantApp() {
   const [participantId, setParticipantId] = useState(() => readStoredValue(storageKey(sessionId, 'participantId')));
   const [nickname, setNickname] = useState(() => readStoredValue(storageKey(sessionId, 'nickname')));
   const [isJoining, setIsJoining] = useState(false);
+  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState('');
   const [likingResponseId, setLikingResponseId] = useState(null);
@@ -106,13 +117,13 @@ export default function ParticipantApp() {
   }, [currentQuestion?.id]);
 
   useEffect(() => {
-    if (session && participantId) {
+    if (session && participantId && !participantsLoading && participant) {
       realtime.touchParticipant(sessionId, participantId);
       const timer = window.setInterval(() => realtime.touchParticipant(sessionId, participantId), 15000);
       return () => window.clearInterval(timer);
     }
     return undefined;
-  }, [participantId, session?.id, sessionId]);
+  }, [participantId, participant?.participantId, participantsLoading, session?.id, sessionId]);
 
   useEffect(() => {
     if (!session || !sessionId || !participantId || !nickname) return;
@@ -170,6 +181,10 @@ export default function ParticipantApp() {
     );
   }
 
+  if (participantId && participantsLoading && !participant) {
+    return <main className="mobile-shell client-room-shell client-page" style={accentStyle}><WaitingScreen title="참여 기록을 확인하고 있어요." message="잠시만 기다려 주세요." /></main>;
+  }
+
   const handleJoin = async (nextNickname, avatar) => {
     setIsJoining(true);
     try {
@@ -177,6 +192,8 @@ export default function ParticipantApp() {
       await Promise.resolve(realtime.joinParticipant(sessionId, nextParticipantId, nextNickname, avatar));
       setParticipantId(nextParticipantId);
       setNickname(nextNickname);
+      writeStoredValue('offline-salon:avatar', JSON.stringify(avatar));
+      setIsEditingAvatar(false);
       setActionError('');
     } catch (error) {
       console.error('[ParticipantApp] join failed', error);
@@ -301,10 +318,21 @@ export default function ParticipantApp() {
     }));
   };
 
-  if (!participantId || !nickname) {
+  if (!participantId || !nickname || isEditingAvatar || (!participantsLoading && !participant)) {
     return (
       <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
-        <JoinForm session={session} onJoin={handleJoin} loading={isJoining} allowNickname={session.allowNickname} />
+        <JoinForm
+          key={`${sessionId}:${isEditingAvatar ? 'edit' : 'join'}`}
+          session={session}
+          onJoin={handleJoin}
+          onCancel={() => { setIsEditingAvatar(false); setActionError(''); }}
+          loading={isJoining}
+          allowNickname={session.allowNickname}
+          initialNickname={nickname}
+          initialAvatar={avatarForSession(participant?.avatar || readStoredAvatar(), session)}
+          editing={isEditingAvatar}
+          error={actionError}
+        />
       </main>
     );
   }
@@ -314,7 +342,7 @@ export default function ParticipantApp() {
   }
 
   if (hasSessionModule(session, 'pear-play') && (session.stage?.mode === 'pear-play' || (session.stage?.mode === 'lobby' && !currentQuestion))) {
-    return <div style={accentStyle}><PearPlayParticipantView session={session} participants={participants} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} /></div>;
+    return <div style={accentStyle}><PearPlayParticipantView session={session} participants={participants} participant={participant || { participantId, nickname }} onSubmit={handleSavePearPairing} onEditAvatar={() => setIsEditingAvatar(true)} /></div>;
   }
 
   if (session.stage?.mode === 'pdf') {
@@ -339,7 +367,7 @@ export default function ParticipantApp() {
   if (session.stage?.mode === 'lobby' || !currentQuestion) {
     return (
       <main className="mobile-shell client-room-shell client-page" style={accentStyle}>
-        <WaitingScreen title={`${nickname}님의 자리가 준비됐어요.`} message="앞 화면에서 내 캐릭터와 함께 도착한 사람들을 만나보세요." />
+        <WaitingScreen title={`${nickname}님의 자리가 준비됐어요.`} message="앞 화면에서 내 캐릭터와 함께 도착한 사람들을 만나보세요." avatar={participant?.avatar} nickname={nickname} onEditAvatar={() => setIsEditingAvatar(true)} />
       </main>
     );
   }
@@ -353,6 +381,7 @@ export default function ParticipantApp() {
             <h1>{session.title}</h1>
             <p className="muted">{currentQuestion.description || '질문에 참여하고 다른 사람의 공개 조각도 확인해 보세요.'}</p>
           </div>
+          <button className="participant-avatar-edit-inline" type="button" onClick={() => setIsEditingAvatar(true)} aria-label="내 캐릭터 수정"><SalonAvatar avatar={participant?.avatar} compact /></button>
           <div className="row wrap gap-sm">
             <span className="badge">응답 {visibleResponses.length}</span>
             <span className="badge">내 답변 {myResponse ? '있음' : '없음'}</span>

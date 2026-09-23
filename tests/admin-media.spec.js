@@ -89,7 +89,7 @@ test('check-in core adds applicants and validates a personal QR token', async ({
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
   await expect(page.locator('.checkin-hero')).toContainText('UNFRAME Demo Salon');
-  await page.getByPlaceholder('QR URL, applicationId, token').fill('https://join.unframe.kr/pass/SALON-HARIN-0001');
+  await page.getByPlaceholder('QR URL, applicationId, token').fill('SALON-HARIN-0001');
   await page.getByRole('button', { name: '체크인 처리' }).click();
   await expect(page.locator('.checkin-result')).toContainText('정하린님 입장 완료');
 
@@ -184,6 +184,7 @@ test('PDF is analyzed, linked and registered', async ({ page, context }) => {
   const clientPage = await context.newPage();
   await clientPage.setViewportSize({ width: 390, height: 844 });
   await clientPage.goto('/client/session_demo');
+  await clientPage.getByRole('button', { name: '이 캐릭터로 입장' }).click();
   await expect(clientPage.locator('.pdf-companion-card')).toBeVisible();
   const mobileLayout = await clientPage.evaluate(() => {
     const heading = document.querySelector('.pdf-companion-copy h1');

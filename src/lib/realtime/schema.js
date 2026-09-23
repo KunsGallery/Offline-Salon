@@ -3,6 +3,7 @@ import { clampPdfZoom } from '../pdfView';
 import { normalizeSessionModules } from '../sessionModules';
 import { normalizeSessionExhibitionReferences } from '../exhibitionCatalog';
 import { normalizeCheckinApplications } from '../checkin';
+import { normalizeAvatar } from '../avatar';
 
 export function nowIso() {
   return new Date().toISOString();
@@ -196,7 +197,7 @@ export function normalizeParticipant(participantId, participant) {
   return cloneParticipant({
     participantId,
     nickname: participant?.nickname ?? null,
-    avatar: participant?.avatar && typeof participant.avatar === 'object' ? { ...participant.avatar } : null,
+    avatar: participant?.avatar && typeof participant.avatar === 'object' ? normalizeAvatar(participant.avatar) : null,
     grapeSelections: participant?.grapeSelections && typeof participant.grapeSelections === 'object'
       ? Object.fromEntries(Object.entries(participant.grapeSelections).map(([selectionId, selection]) => [selectionId, {
         id: selection?.id || selectionId,
@@ -268,6 +269,7 @@ export function normalizeSession(session) {
       participantId: session.stage?.participantId || null,
       pearParticipantId: session.stage?.pearParticipantId || null,
       pearPhase: session.stage?.pearPhase || 'idle',
+      pearInvestigationStep: session.stage?.pearInvestigationStep || 'idle',
       pearView: session.stage?.pearView || 'case',
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),

@@ -186,6 +186,91 @@ test('lobby seats joined participants as chosen vector characters', async ({ pag
   expect(overflow).toBe(false);
 });
 
+test('lobby keeps twenty characters around the table in join order', async ({ page }) => {
+  const state = roundtableState(0);
+  state.sessions.session_roundtable.currentQuestionId = null;
+  state.sessions.session_roundtable.questions = [];
+  state.sessions.session_roundtable.stage = { mode: 'lobby', page: 1, blackout: false };
+  state.sessions.session_roundtable.participants = Object.fromEntries(Array.from({ length: 21 }, (_, index) => {
+    const id = `guest_${String(index + 1).padStart(2, '0')}`;
+    return [id, {
+      participantId: id,
+      nickname: `참여자${index + 1}`,
+      avatar: { shape: 'round', color: 'teal', expression: 'bright', accessory: 'glasses' },
+      joinedAt: new Date(Date.UTC(2026, 7, 3, 9, index)).toISOString(),
+      lastSeenAt: new Date(Date.UTC(2026, 7, 3, 11, 20 - index)).toISOString(),
+    }];
+  }));
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_roundtable');
+  await expect(page.locator('.lobby-person')).toHaveCount(20);
+  await expect(page.locator('.lobby-overflow')).toContainText('+1명');
+  await expect(page.locator('.lobby-person').first()).toContainText('참여자1');
+  await page.locator('.lobby-person').last().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const overlaps = await page.locator('.lobby-person').evaluateAll((elements) => {
+    const bounds = elements.map((element) => element.getBoundingClientRect());
+    return bounds.reduce((count, a, index) => count + bounds.slice(index + 1).filter((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top).length, 0);
+  });
+  expect(overlaps).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false);
+});
+
+test('participant can return after reset and edit the shared character', async ({ page }) => {
+  const state = roundtableState(0);
+  state.sessions.session_roundtable.currentQuestionId = null;
+  state.sessions.session_roundtable.questions = [];
+  state.sessions.session_roundtable.stage = { mode: 'lobby', page: 1, blackout: false };
+  state.sessions.session_roundtable.enabledModules = ['pear-play'];
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_roundtable', 'old_guest');
+    localStorage.setItem('offline-salon:nickname:session_roundtable', '재입장');
+  }, { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_roundtable');
+  await expect(page.getByRole('textbox', { name: '닉네임' })).toHaveValue('재입장');
+  await page.getByRole('button', { name: '소품 꾸미기' }).click();
+  await page.getByRole('button', { name: '탐정 모자' }).click();
+  await page.getByRole('button', { name: '기본 모습' }).click();
+  await page.getByRole('button', { name: '호기심' }).click();
+  await page.getByRole('button', { name: '이 캐릭터로 입장' }).click();
+  await expect(page.getByRole('heading', { name: '평범한 사진에 사건을 열어보세요.' })).toBeVisible();
+  await expect(page.locator('.pear-avatar-edit-button .avatar-accessory-hat')).toBeVisible();
+  await page.getByRole('button', { name: '내 캐릭터 수정' }).click();
+  await page.getByRole('button', { name: '취소' }).click();
+  await expect(page.locator('.pear-avatar-edit-button .avatar-accessory-hat')).toBeVisible();
+  await page.getByRole('button', { name: '내 캐릭터 수정' }).click();
+  await page.getByRole('button', { name: '소품 꾸미기' }).click();
+  await page.getByRole('button', { name: '돋보기' }).click();
+  await page.getByRole('button', { name: '변경 저장' }).click();
+  await expect(page.locator('.pear-avatar-edit-button .avatar-accessory-tool')).toBeVisible();
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.participants.old_guest.avatar.accessory, STORAGE_KEY)).toBe('magnifier');
+});
+
+test('selected PEAR PLAY photograph shows its participant character', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.questions = [];
+  session.enabledModules = ['pear-play'];
+  session.stage = { mode: 'pear-play', pearView: 'case', pearPhase: 'photo', pearParticipantId: 'guest_1', blackout: false };
+  session.participants = {
+    guest_1: {
+      participantId: 'guest_1', nickname: '현장탐정',
+      avatar: { shape: 'oval', color: 'ink', expression: 'calm', accessory: 'detective-hat' },
+      pearPairing: { photoUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', status: 'uploaded' },
+      joinedAt: '2026-08-03T09:00:00.000Z', lastSeenAt: '2026-08-03T09:00:00.000Z',
+    },
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_roundtable');
+  await expect(page.locator('.pear-host-selected .pear-selected-photo img')).toBeVisible();
+  await expect(page.locator('.pear-selected-identity')).toContainText('현장탐정');
+  await expect(page.locator('.pear-selected-identity .avatar-accessory-hat')).toBeVisible();
+});
+
 test('core result gallery groups every included result by participant and supports generic likes', async ({ page }) => {
   const state = roundtableState(0);
   const session = state.sessions.session_roundtable;

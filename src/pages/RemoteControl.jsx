@@ -75,10 +75,25 @@ export default function RemoteControl() {
   const startPearInvestigation = async (participant) => {
     const selectedPairing = participant?.pearPairing;
     if (!participant || !selectedPairing?.photoUrl) throw new Error('먼저 조사할 참가자 사진을 선택해 주세요.');
-    const investigatingStage = { ...stage, mode: 'pear-play', pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', blackout: false };
+    const investigatingStage = { ...stage, mode: 'pear-play', pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'observing', blackout: false };
     await realtime.updateSession(session.id, { currentQuestionId: null, stage: investigatingStage, status: 'live' });
+    let currentStep = 'observing';
     try {
-      const pairing = await requestPearPairing({ sessionId, participantId: participant.participantId, photoUrl: selectedPairing.photoUrl });
+      const pairing = await requestPearPairing({
+        sessionId,
+        participantId: participant.participantId,
+        photoUrl: selectedPairing.photoUrl,
+        onProgress: async ({ phase }) => {
+          const pearInvestigationStep = phase;
+          if (pearInvestigationStep === currentStep) return;
+          currentStep = pearInvestigationStep;
+          await realtime.updateSession(session.id, {
+            currentQuestionId: null,
+            stage: { ...investigatingStage, pearInvestigationStep },
+            status: 'live',
+          });
+        },
+      });
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: {
@@ -87,13 +102,13 @@ export default function RemoteControl() {
           photoPath: selectedPairing.photoPath || null,
         },
       });
-      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'found' }, status: 'live' });
+      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'found', pearInvestigationStep: 'found' }, status: 'live' });
     } catch (reason) {
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: { ...selectedPairing, status: 'error', error: reason?.message || '추리에 실패했습니다.', updatedAt: new Date().toISOString() },
       });
-      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'photo' }, status: 'live' });
+      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'photo', pearInvestigationStep: 'idle' }, status: 'live' });
       throw reason;
     }
   };
