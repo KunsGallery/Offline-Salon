@@ -207,8 +207,32 @@ function EvidenceWall({ participants = [], currentId = '' }) {
   </div>;
 }
 
+function HostPairBoardView({ current, pairing, phase }) {
+  const artwork = pairing.finalArtwork;
+  const showConnection = phase === 'connection';
+  const photoClues = [...(Array.isArray(pairing.analysis?.objects) ? pairing.analysis.objects : []),
+    ...(Array.isArray(pairing.analysis?.colors) ? pairing.analysis.colors : [])].filter(Boolean).slice(0, 2);
+  const artClues = (Array.isArray(pairing.keywords) ? pairing.keywords : []).filter(Boolean).slice(0, 2);
+
+  return <section className={`pear-host-pair-board ${showConnection ? 'is-connecting' : ''}`} aria-label="접수 사진과 찾은 작품">
+    <div className="pear-board-pair">
+      <figure className="pear-board-photo"><div className="pear-board-image"><img src={pairing.photoUrl} alt={`${current.nickname || '참가자'}의 접수 사진`} /></div><figcaption><span>접수 사진</span><strong>{current.nickname || '익명'}</strong></figcaption></figure>
+      <figure className="pear-board-artwork"><div className="pear-board-image">{artwork?.imageUrl ? <img src={artwork.imageUrl} alt={`${artwork.artist || '작가 미상'}의 ${artwork.title || '작품'}`} /> : <span>작품 이미지를 확인하고 있어요.</span>}</div><figcaption><span>찾은 작품</span><strong>{artwork?.title || '작품 정보 확인 중'}</strong><small>{[artwork?.artist, artwork?.year].filter(Boolean).join(' · ')}</small>{artwork?.dimensions || artwork?.materials ? <small>{[artwork.dimensions, artwork.materials].filter(Boolean).join(' · ')}</small> : null}</figcaption></figure>
+    </div>
+    {showConnection ? <div className="pear-board-map" aria-live="polite">
+      <div className="pear-board-map-nodes">
+        <div className="pear-board-map-thread" aria-hidden="true" />
+        <div className="pear-board-map-clue"><span>사진의 단서</span><p>{photoClues.length ? photoClues.join(' · ') : '사진 속 장면과 분위기'}</p></div>
+        <div className="pear-board-map-center"><span>발견한 연결</span><strong>{pairing.statement || '두 장면을 잇는 하나의 시선'}</strong></div>
+        <div className="pear-board-map-clue"><span>작품의 단서</span><p>{artClues.length ? artClues.join(' · ') : artwork?.title || '찾은 작품'}</p></div>
+      </div>
+      <p className="pear-board-map-explanation"><span>연결 이유</span>{pairing.connection || '두 장면의 연결을 정리하고 있어요.'}</p>
+    </div> : null}
+  </section>;
+}
+
 function HostCaseState({ current, pairing, phase, showArtwork, investigationStep }) {
-  if (showArtwork) return <section className="pear-host-reveal-stage"><div className="pear-reveal-image"><img src={pairing.finalArtwork?.imageUrl} alt={`${pairing.finalArtwork?.artist}의 ${pairing.finalArtwork?.title}`} /></div><ArtworkCaption artwork={pairing.finalArtwork} /><div className="pear-reveal-connection"><span>{phase === 'connection' ? 'WHY THIS PAIR?' : 'THE PAIR'}</span><p>{pairing.connection}</p>{phase === 'connection' ? <strong>{pairing.statement}</strong> : null}</div></section>;
+  if (showArtwork) return <HostPairBoardView current={current} pairing={pairing} phase={phase} />;
   if (phase === 'investigating') return <HostInvestigationView current={current} pairing={pairing} investigationStep={investigationStep} />;
   if (phase === 'found') return <HostFoundView pairing={pairing} />;
   return <section className="pear-host-state pear-host-state-photo"><span className="pear-case-label">SELECTED EVIDENCE</span><div className="pear-selected-photo"><img src={pairing.photoUrl} alt={`${current.nickname || '익명'}이 접수한 사건 사진`} /></div><div className="pear-selected-identity"><SalonAvatar avatar={current.avatar} label={current.nickname || '익명'} compact /></div><p>리모컨에서 추리를 시작하면 이 장면을 Detective P가 조사합니다.</p></section>;
@@ -223,7 +247,7 @@ export function PearPlayHostView({ session, participants = [] }) {
   if (!current || !pairing) return <main className="pear-host pear-host-empty"><div className="pear-host-vignette" aria-hidden="true" /><EvidenceWall participants={submitted} /><div className="pear-empty-copy"><span className="pear-case-label">THE RIENZI AGENCY · INTAKE</span><h1>다음 사건을<br />기다리고 있어요.</h1><p>참여자가 사진을 제출하면 조수가 사건 보드에 등록합니다.</p></div></main>;
   const phase = session.stage?.pearPhase || 'photo';
   const showArtwork = phase === 'revealed' || phase === 'connection';
-  const detectiveBoardMode = !wallMode && ['photo', 'investigating', 'found'].includes(phase);
+  const detectiveBoardMode = !wallMode && ['photo', 'investigating', 'found', 'revealed', 'connection'].includes(phase);
   const sceneKey = wallMode ? 'wall' : `${phase}:${current.participantId}`;
   return <main className={`pear-host ${wallMode ? 'pear-host-wall' : detectiveBoardMode ? 'pear-host-selected' : `pear-host-case phase-${phase}`}`}><div className="pear-host-vignette" aria-hidden="true" /><div className="pear-scene-transition" key={sceneKey} aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · {wallMode ? 'EVIDENCE WALL' : phaseLabel(phase)}</span><h1>{wallMode ? 'EVIDENCE WALL' : `${current.nickname || '익명'}의 사건`}</h1><p>{wallMode ? '접수된 사진이 사건 보드에 고정되어 있습니다.' : '조수가 현장 사진을 사건 보드에 정리했습니다.'}</p></div><strong>{wallMode ? `${submitted.length} CASES` : `CASE ${String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}`}</strong></header><div className={`pear-evidence-wall-layer ${detectiveBoardMode ? 'is-hidden' : ''}`}><EvidenceWall participants={submitted} currentId={wallMode ? '' : current.participantId} /></div>{!wallMode ? <HostCaseState current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} investigationStep={session.stage?.pearInvestigationStep} /> : null}</main>;
 }
@@ -253,7 +277,7 @@ export function PearPlayRemotePanel({ session, participants = [], participantsLo
     {current ? <div className="pear-next-step">
       {stage.pearView === 'wall' || stage.pearView === 'board' || !caseOnScreen ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showPhoto}>현장 사진 공개</button>
         : phase === 'investigating' ? <button className="pear-primary-action" type="button" disabled>탐정 P가 추리 중…</button>
-          : phase === 'revealed' ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showConnection}>연결 이유 보여주기</button>
+          : phase === 'revealed' ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showConnection}>연결 이유 보기</button>
             : phase === 'connection' ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showWall}>전체 코르크 보드 보기</button>
               : currentReady ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showArtwork}>찾은 작품 공개</button>
                 : <button className="pear-primary-action" type="button" disabled={busy} onClick={() => run(() => onStartInvestigation(current), '작품 분석이 완료되었습니다.', '탐정 P가 사진과 작품을 조사 중…')}>{current.pearPairing.status === 'error' ? '추리 다시 시작' : '탐정 P의 추리 시작'}</button>}

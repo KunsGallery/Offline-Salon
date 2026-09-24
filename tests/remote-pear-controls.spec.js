@@ -22,7 +22,26 @@ function pearSession() {
         responses: [],
         participants: {
           guest_one: { participantId: 'guest_one', nickname: '호야', pearPairing: { photoUrl: PHOTO, status: 'uploaded' } },
-          guest_two: { participantId: 'guest_two', nickname: '프링', pearPairing: { photoUrl: PHOTO, status: 'ready', artwork: { title: '테스트 작품' } } },
+          guest_two: {
+            participantId: 'guest_two',
+            nickname: '프링',
+            pearPairing: {
+              photoUrl: '/pear-play/envelope-open-original.webp',
+              status: 'ready',
+              finalArtwork: {
+                imageUrl: '/pear-play/office-board-original.webp',
+                title: '테스트 작품',
+                artist: '테스트 작가',
+                year: '2026',
+                dimensions: '30 × 40 cm',
+                materials: '캔버스에 유채',
+              },
+              analysis: { objects: ['편지', '종이'], colors: ['따뜻한 갈색'] },
+              keywords: ['기록', '기억'],
+              statement: '두 장면은 기억을 기록합니다.',
+              connection: '일상의 편지와 작품의 기록은 사소한 장면을 오래 바라보게 합니다.',
+            },
+          },
         },
       },
     },
@@ -51,9 +70,43 @@ test('mobile PEAR remote keeps the next action visible and switches cases withou
   await page.getByRole('button', { name: /프링 작품 분석 완료/ }).click();
   await expect(page.getByRole('button', { name: '찾은 작품 공개' })).toBeVisible();
   await page.getByRole('button', { name: '찾은 작품 공개' }).click();
-  await expect(page.getByRole('button', { name: '연결 이유 보여주기' })).toBeVisible();
-  await page.getByRole('button', { name: '연결 이유 보여주기' }).click();
+  await expect(page.getByRole('button', { name: '연결 이유 보기' })).toBeVisible();
+  await page.getByRole('button', { name: '연결 이유 보기' }).click();
   await expect(page.getByRole('button', { name: '전체 코르크 보드 보기' })).toBeVisible();
+});
+
+test('artwork reveal and connection stay on the rabbit detective board', async ({ page, context }) => {
+  const state = pearSession();
+  state.sessions.session_pear_remote.stage = { mode: 'pear-play', pearView: 'case', pearPhase: 'found', pearParticipantId: 'guest_two', blackout: false };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/remote/session_pear_remote');
+  const host = await context.newPage();
+  await host.setViewportSize({ width: 1440, height: 900 });
+  await host.goto('/host/session_pear_remote');
+
+  await page.getByRole('button', { name: '찾은 작품 공개' }).click();
+  await expect(host.locator('.pear-host-selected')).toBeVisible();
+  await expect(host.locator('.pear-board-pair img')).toHaveCount(2);
+  await expect(host.locator('.pear-board-artwork figcaption')).toContainText('30 × 40 cm');
+  await expect(host.locator('.pear-board-artwork figcaption')).toContainText('캔버스에 유채');
+  await expect(host.locator('.pear-host-reveal-stage')).toHaveCount(0);
+  await expect(host.locator('.pear-evidence-wall-layer')).toHaveClass(/is-hidden/);
+  await expect(host.locator('.pear-board-map')).toHaveCount(0);
+
+  await page.getByRole('button', { name: '연결 이유 보기' }).click();
+  await expect(host.locator('.pear-host-selected')).toBeVisible();
+  await expect(host.locator('.pear-board-pair img')).toHaveCount(2);
+  await expect(host.locator('.pear-board-map')).toContainText('일상의 편지와 작품의 기록');
+  await expect(host.locator('.pear-board-map')).toContainText('사진의 단서');
+  await expect(host.locator('.pear-board-map')).toContainText('작품의 단서');
+  const captionBottom = await host.locator('.pear-board-artwork figcaption').evaluate((element) => element.getBoundingClientRect().bottom);
+  const mapTop = await host.locator('.pear-board-map').evaluate((element) => element.getBoundingClientRect().top);
+  expect(captionBottom).toBeLessThan(mapTop);
+  const mapBottom = await host.locator('.pear-board-map').evaluate((element) => element.getBoundingClientRect().bottom);
+  expect(mapBottom).toBeLessThan(900 * .75);
+  await expect.poll(() => host.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false);
+  await host.close();
 });
 
 test('opening the participant page does not change the live host stage', async ({ page }) => {
