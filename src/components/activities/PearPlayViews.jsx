@@ -228,16 +228,42 @@ export function PearPlayHostView({ session, participants = [] }) {
   return <main className={`pear-host ${wallMode ? 'pear-host-wall' : detectiveBoardMode ? 'pear-host-selected' : `pear-host-case phase-${phase}`}`}><div className="pear-host-vignette" aria-hidden="true" /><div className="pear-scene-transition" key={sceneKey} aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · {wallMode ? 'EVIDENCE WALL' : phaseLabel(phase)}</span><h1>{wallMode ? 'EVIDENCE WALL' : `${current.nickname || '익명'}의 사건`}</h1><p>{wallMode ? '접수된 사진이 사건 보드에 고정되어 있습니다.' : '조수가 현장 사진을 사건 보드에 정리했습니다.'}</p></div><strong>{wallMode ? `${submitted.length} CASES` : `CASE ${String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}`}</strong></header><div className={`pear-evidence-wall-layer ${detectiveBoardMode ? 'is-hidden' : ''}`}><EvidenceWall participants={submitted} currentId={wallMode ? '' : current.participantId} /></div>{!wallMode ? <HostCaseState current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} investigationStep={session.stage?.pearInvestigationStep} /> : null}</main>;
 }
 
-export function PearPlayRemotePanel({ session, participants = [], busy = false, run, onStartInvestigation }) {
+export function PearPlayRemotePanel({ session, participants = [], participantsLoading = false, participantsError = null, busy = false, run, onStartInvestigation }) {
   const submitted = useMemo(() => participants.filter((participant) => participant.pearPairing?.photoUrl), [participants]);
   const stage = session.stage || {};
   const updateStage = (patch) => realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...stage, mode: 'pear-play', blackout: false, ...patch }, status: 'live' });
   const current = submitted.find((participant) => participant.participantId === stage.pearParticipantId) || submitted[0];
   const currentReady = current?.pearPairing?.status === 'ready';
-  const choose = (participant) => run(() => updateStage({ pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'photo' }));
-  const openParticipantPage = () => {
-    window.open(`${window.location.origin}/client/${encodeURIComponent(session.id)}`, '_blank', 'noopener,noreferrer');
-    run(() => updateStage({ pearParticipantId: current?.participantId || null, pearView: 'case', pearPhase: 'photo' }));
-  };
-  return <section className="remote-assets pear-remote-panel"><div className="pear-remote-heading"><span className="pear-case-label">THE RIENZI AGENCY · FIELD DESK</span><h2>사건 파일을 관리합니다.</h2><p>접수된 사진을 선택하고, 조수의 기록을 바탕으로 추리를 진행하세요.</p></div><div className="pear-remote-main"><button type="button" disabled={busy} onClick={openParticipantPage}>새 사건 접수 열기</button><button type="button" disabled={busy || !current} onClick={() => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'photo' }))}>현장 사진 공개</button><button type="button" disabled={busy || !current || currentReady} onClick={() => run(() => onStartInvestigation(current))}>추리 시작</button>{currentReady && stage.pearPhase === 'found' ? <button type="button" disabled={busy} onClick={() => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'revealed' }))}>작품 정보 보기</button> : null}<button type="button" disabled={busy || !submitted.length} onClick={() => run(() => updateStage({ pearView: 'wall', pearPhase: 'photo' }))}>전체 코르크 보드</button></div>{current ? <div className="pear-remote-phase"><strong>현재 파일 · {current.nickname || '익명'}</strong><span>{phaseLabel(stage.pearPhase || 'photo')}</span><div>{currentReady && stage.pearPhase === 'found' ? <button type="button" className="active" disabled={busy} onClick={() => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'revealed' }))}>작품 정보 보기</button> : null}{stage.pearPhase === 'revealed' ? <button type="button" disabled={busy} onClick={() => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'connection' }))}>연결 이유</button> : null}</div></div> : null}<div className="pear-remote-people">{submitted.map((participant) => <button type="button" className={participant.participantId === current?.participantId ? 'active' : ''} disabled={busy} key={participant.participantId} onClick={() => choose(participant)}><SalonAvatar avatar={participant.avatar} compact /><span><strong>{participant.nickname || '익명'}</strong><small>{participant.pearPairing.status === 'ready' ? '작품 분석 완료' : participant.pearPairing.status === 'error' ? '추리 실패 · 다시 시도' : '사진 접수 완료'}</small></span></button>)}</div>{!submitted.length ? <p className="pear-remote-empty">아직 접수된 사진이 없습니다. 참가자가 사진을 보내면 이곳에 나타납니다.</p> : null}</section>;
+  const caseOnScreen = stage.mode === 'pear-play' && stage.pearView !== 'wall' && stage.pearView !== 'board' && stage.pearParticipantId === current?.participantId;
+  const phase = caseOnScreen ? stage.pearPhase || 'photo' : 'photo';
+  const choose = (participant) => run(() => updateStage({ pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'photo' }), `${participant.nickname || '익명'}의 사진을 표시했습니다.`);
+  const showPhoto = () => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'photo' }), '현장 사진을 표시했습니다.');
+  const showArtwork = () => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'revealed' }), '찾은 작품을 공개했습니다.');
+  const showConnection = () => run(() => updateStage({ pearParticipantId: current.participantId, pearView: 'case', pearPhase: 'connection' }), '사진과 작품의 연결 이유를 표시했습니다.');
+  const showWall = () => run(() => updateStage({ pearView: 'wall', pearPhase: 'photo' }), '전체 코르크 보드를 표시했습니다.');
+  const currentStatus = !caseOnScreen ? '관객 화면에서 선택 전' : phase === 'investigating' ? '추리 진행 중' : phase === 'found' ? '작품 발견 · 공개 대기' : phase === 'revealed' ? '찾은 작품 공개 중' : phase === 'connection' ? '연결 이유 표시 중' : '현장 사진 공개 중';
+
+  return <section className="remote-assets pear-remote-panel" aria-label="PEAR PLAY 진행">
+    <div className="pear-remote-heading"><div><h2>PEAR PLAY 진행</h2><span>{submitted.length}건 접수</span></div><button type="button" onClick={() => window.open(`${window.location.origin}/client/${encodeURIComponent(session.id)}`, '_blank', 'noopener,noreferrer')}>참가자 화면 보기</button></div>
+    {current ? <div className="pear-current-case">
+      <img className="pear-current-photo" src={current.pearPairing.photoUrl} alt={`${current.nickname || '익명'}의 접수 사진`} />
+      <div className="pear-current-details"><span>현재 선택한 사진</span><strong>{current.nickname || '익명'}</strong><small>{currentStatus}</small></div>
+      <SalonAvatar avatar={current.avatar} compact />
+    </div> : null}
+    {current ? <div className="pear-next-step">
+      {stage.pearView === 'wall' || stage.pearView === 'board' || !caseOnScreen ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showPhoto}>현장 사진 공개</button>
+        : phase === 'investigating' ? <button className="pear-primary-action" type="button" disabled>탐정 P가 추리 중…</button>
+          : phase === 'revealed' ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showConnection}>연결 이유 보여주기</button>
+            : phase === 'connection' ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showWall}>전체 코르크 보드 보기</button>
+              : currentReady ? <button className="pear-primary-action" type="button" disabled={busy} onClick={showArtwork}>찾은 작품 공개</button>
+                : <button className="pear-primary-action" type="button" disabled={busy} onClick={() => run(() => onStartInvestigation(current), '작품 분석이 완료되었습니다.', '탐정 P가 사진과 작품을 조사 중…')}>{current.pearPairing.status === 'error' ? '추리 다시 시작' : '탐정 P의 추리 시작'}</button>}
+      {caseOnScreen && phase !== 'photo' && phase !== 'investigating' ? <button className="pear-secondary-action" type="button" disabled={busy} onClick={showPhoto}>현장 사진 다시 보기</button> : null}
+      {stage.pearView !== 'wall' && submitted.length > 1 ? <button className="pear-secondary-action" type="button" disabled={busy} onClick={showWall}>전체 코르크 보드</button> : null}
+    </div> : null}
+    <div className="pear-list-heading" id="pear-participant-list"><h3>접수된 사진</h3><span>{submitted.length}건</span></div>
+    {participantsError ? <p className="pear-remote-empty is-error" role="alert">접수 목록을 불러올 수 없습니다. 상단의 다시 연결을 눌러 주세요.</p>
+      : participantsLoading ? <p className="pear-remote-empty" role="status">접수 목록 확인 중…</p>
+        : submitted.length ? <div className="pear-remote-people">{submitted.map((participant) => <button type="button" className={caseOnScreen && participant.participantId === current.participantId ? 'active' : ''} disabled={busy} key={participant.participantId} onClick={() => choose(participant)}><img className="pear-list-photo" src={participant.pearPairing.photoUrl} alt="" /><span><strong>{participant.nickname || '익명'}</strong><small>{participant.pearPairing.status === 'ready' ? '작품 분석 완료' : participant.pearPairing.status === 'error' ? '추리 실패 · 다시 시도 가능' : '사진 접수 완료'}</small></span><SalonAvatar avatar={participant.avatar} compact /></button>)}</div>
+          : <p className="pear-remote-empty">아직 접수된 사진이 없습니다. 참가자가 업로드하면 이곳에 나타납니다.</p>}
+  </section>;
 }
