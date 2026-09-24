@@ -181,6 +181,9 @@ test('lobby seats joined participants as chosen vector characters', async ({ pag
   await page.goto('/host/session_roundtable');
   await expect(page.getByTestId('salon-lobby')).toBeVisible();
   await expect(page.locator('.lobby-person')).toHaveCount(2);
+  await expect(page.locator('.lobby-chair')).toHaveCount(20);
+  await expect(page.locator('.lobby-join .qr-frame')).toBeVisible();
+  await expect(page.locator('.lobby-heading')).toContainText('2명 자리 등록');
   await expect(page.getByText('질문이 시작되면')).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth || document.documentElement.scrollHeight > document.documentElement.clientHeight);
   expect(overflow).toBe(false);
@@ -205,6 +208,7 @@ test('lobby keeps twenty characters around the table in join order', async ({ pa
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/host/session_roundtable');
   await expect(page.locator('.lobby-person')).toHaveCount(20);
+  await expect(page.locator('.lobby-join .qr-frame')).toBeVisible();
   await expect(page.locator('.lobby-overflow')).toContainText('+1명');
   await expect(page.locator('.lobby-person').first()).toContainText('참여자1');
   await page.locator('.lobby-person').last().evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
@@ -213,7 +217,62 @@ test('lobby keeps twenty characters around the table in join order', async ({ pa
     return bounds.reduce((count, a, index) => count + bounds.slice(index + 1).filter((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top).length, 0);
   });
   expect(overlaps).toBe(0);
+  const clipped = await page.locator('.lobby-person').evaluateAll((elements) => elements.some((element) => {
+    const box = element.getBoundingClientRect();
+    return box.left < 0 || box.right > innerWidth || box.top < 0 || box.bottom > innerHeight;
+  }));
+  expect(clipped).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.lobby-join .qr-frame')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false);
+});
+
+test('new lobby arrivals animate once without replaying seated characters', async ({ page, context }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.questions = [];
+  session.stage = { mode: 'lobby', page: 1, blackout: false };
+  session.participants = {
+    guest_1: { participantId: 'guest_1', nickname: '먼저 온 사람', joinedAt: '2026-08-03T09:00:00.000Z' },
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.goto('/host/session_roundtable');
+  await expect(page.locator('.lobby-person')).toHaveCount(1);
+  await expect(page.locator('.lobby-person.is-arriving')).toHaveCount(0);
+
+  const updater = await context.newPage();
+  await updater.goto('/host/session_roundtable');
+  await updater.evaluate((key) => {
+    const next = JSON.parse(localStorage.getItem(key));
+    next.sessions.session_roundtable.participants.guest_2 = {
+      participantId: 'guest_2', nickname: '방금 온 사람', joinedAt: '2026-08-03T09:01:00.000Z',
+    };
+    localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
+  await expect(page.locator('.lobby-person')).toHaveCount(2);
+  await expect(page.locator('.lobby-person.is-arriving')).toHaveCount(1);
+  await expect(page.locator('.lobby-person.is-arriving')).toContainText('방금 온 사람');
+  await expect(page.locator('.lobby-person.is-arriving')).toHaveCount(0, { timeout: 4000 });
+  await updater.close();
+});
+
+test('pear lobby shows case intake on the shared room board', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.questions = [];
+  session.stage = { mode: 'lobby', page: 1, blackout: false };
+  session.enabledModules = ['pear-play'];
+  session.participants = {
+    guest_1: { participantId: 'guest_1', nickname: '모스', joinedAt: '2026-08-03T09:00:00.000Z', pearPairing: { photoUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' } },
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_roundtable');
+  await expect(page.locator('.lobby-board-note')).toContainText('사건 파일 접수 중');
+  await expect(page.locator('.lobby-board-note')).toContainText('사진 1건 도착');
 });
 
 test('participant can return after reset and edit the shared character', async ({ page }) => {

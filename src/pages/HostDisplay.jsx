@@ -135,7 +135,7 @@ export default function HostDisplay() {
   }
 
   if (session.stage?.mode === 'lobby' || !activeQuestion) {
-    return <HostShell session={session} variant="salon" aside={<span className="badge">참여자 {participants.length}</span>}><LobbyHostView session={session} participants={participants} sessionId={sessionId} /></HostShell>;
+    return <HostShell session={session} variant="lobby"><LobbyHostView session={session} participants={participants} sessionId={sessionId} /></HostShell>;
   }
 
   return (

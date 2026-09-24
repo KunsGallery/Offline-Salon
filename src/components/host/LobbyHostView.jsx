@@ -1,28 +1,72 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import QRJoinCard from './QRJoinCard';
 import SalonAvatar from '../participants/SalonAvatar';
+import { hasSessionModule } from '../../lib/sessionModules';
 
 const LOBBY_SLOTS = [
-  [50, 15], [59.3, 16.1], [68.5, 19.4], [77.3, 25.5], [85, 35.7],
-  [91, 52], [85, 68.3], [77.3, 78.5], [68.5, 84.6], [59.3, 87.9],
-  [50, 89], [40.7, 87.9], [31.5, 84.6], [22.7, 78.5], [15, 68.3],
-  [9, 52], [15, 35.7], [22.7, 25.5], [31.5, 19.4], [40.7, 16.1],
+  [14, 61], [21, 55], [29, 50], [37, 47], [45, 45],
+  [55, 45], [63, 47], [71, 50], [79, 55], [86, 61],
+  [86, 79], [79, 76], [71, 79], [63, 81], [55, 82],
+  [45, 82], [37, 81], [29, 79], [21, 76], [14, 79],
 ];
 
+const seenBySession = new Map();
+
 export default function LobbyHostView({ session, participants = [], sessionId }) {
-  const seated = [...participants]
-    .sort((a, b) => String(a.joinedAt || '').localeCompare(String(b.joinedAt || '')) || String(a.participantId).localeCompare(String(b.participantId)))
-    .slice(0, LOBBY_SLOTS.length);
+  const seated = [...participants].sort((a, b) =>
+    String(a.joinedAt || '').localeCompare(String(b.joinedAt || ''))
+    || String(a.participantId).localeCompare(String(b.participantId))).slice(0, LOBBY_SLOTS.length);
+  const isPearPlay = hasSessionModule(session, 'pear-play');
+  const isGrape = hasSessionModule(session, 'exhibition-grape');
+  const caseCount = participants.filter((participant) => participant.pearPairing?.photoUrl).length;
+  const [arrivingIds, setArrivingIds] = useState([]);
+  const seenRef = useRef(null);
+
+  if (!seenRef.current) {
+    if (!seenBySession.has(sessionId)) {
+      seenBySession.set(sessionId, new Set(seated.map((participant) => participant.participantId)));
+    }
+    seenRef.current = seenBySession.get(sessionId);
+  }
+
+  useEffect(() => {
+    const arrivals = seated.map((participant) => participant.participantId)
+      .filter((id) => !seenRef.current.has(id));
+    if (!arrivals.length) return undefined;
+    arrivals.forEach((id) => seenRef.current.add(id));
+    setArrivingIds((current) => [...new Set([...current, ...arrivals])]);
+    const timer = window.setTimeout(() => {
+      setArrivingIds((current) => current.filter((id) => !arrivals.includes(id)));
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [participants]);
+
   return (
-    <section className="salon-lobby" data-testid="salon-lobby">
-      <header><div><h2>어서 오세요. 자리를 골라 앉아주세요.</h2><p>휴대폰에서 닉네임과 캐릭터를 만들면 이 테이블에 함께 앉게 됩니다.</p></div><strong>{participants.length}<span>명 입장</span></strong></header>
+    <section className={`salon-lobby ${isPearPlay ? 'is-pear-play' : isGrape ? 'is-grape' : ''}`} data-testid="salon-lobby">
       <div className="salon-lobby-room">
-        <div className="lobby-table"><div><span>{session.title}</span><h1><span>우리의 자리가</span><span>하나씩 채워지고 있어요.</span></h1><p>{seated.length ? `${seated.length}명이 먼저 도착했습니다.` : '첫 번째 손님을 기다리고 있습니다.'}</p></div></div>
-        <div className={`lobby-people ${seated.length > 12 ? 'is-crowded' : ''}`}>
-          {seated.map((participant, index) => <div className="lobby-person" key={participant.participantId} style={{ '--person-x': `${LOBBY_SLOTS[index][0]}%`, '--person-y': `${LOBBY_SLOTS[index][1]}%`, '--person-delay': `${index * 70}ms` }}><SalonAvatar avatar={participant.avatar} label={participant.nickname || '익명'} compact /></div>)}
+        <header className="lobby-heading">
+          <span>UNFRAME SALON</span>
+          <h2>모두의 자리가<br />준비됐어요.</h2>
+          <p>휴대폰으로 캐릭터를 만들면 이곳에 자리가 생깁니다.</p>
+          <strong>{participants.length}<small>명 자리 등록</small></strong>
+        </header>
+        <div className="lobby-board-note" aria-live="polite">
+          {isPearPlay ? <><span>PEAR PLAY</span><strong>사건 파일 접수 중</strong><small>사진 {caseCount}건 도착</small></>
+            : isGrape ? <><span>EXHIBITION GRAPE</span><strong>우리의 전시가 시작됩니다</strong><small>참가자와 함께 채워지는 공간</small></>
+              : <><span>SALON</span><strong>{session.title}</strong><small>함께할 사람들을 기다립니다</small></>}
         </div>
-        <aside className="lobby-join"><QRJoinCard sessionId={sessionId} title="QR을 찍고 자리에 앉기" /></aside>
-        {participants.length > LOBBY_SLOTS.length ? <span className="lobby-overflow">+{participants.length - LOBBY_SLOTS.length}명도 함께 있어요</span> : null}
+        <aside className="lobby-join"><QRJoinCard sessionId={sessionId} title="휴대폰 참여" /></aside>
+        <div className="lobby-table" aria-hidden="true"><div className="lobby-table-top"><span>UNFRAME</span><strong>{session.title}</strong></div></div>
+        <div className="lobby-people" aria-label={`${seated.length}명 자리 등록`}>
+          {LOBBY_SLOTS.map(([x, y], index) => {
+            const participant = seated[index];
+            return <div className={`lobby-seat ${participant ? 'is-occupied' : ''}`} key={index} style={{ '--person-x': `${x}%`, '--person-y': `${y}%` }}>
+              <span className="lobby-chair" aria-hidden="true" />
+              {participant ? <div className={`lobby-person ${arrivingIds.includes(participant.participantId) ? 'is-arriving' : ''}`}><SalonAvatar avatar={participant.avatar} label={participant.nickname || '익명'} compact /></div> : null}
+            </div>;
+          })}
+        </div>
+        {participants.length > LOBBY_SLOTS.length ? <span className="lobby-overflow">+{participants.length - LOBBY_SLOTS.length}명 자리 등록</span> : null}
       </div>
     </section>
   );
