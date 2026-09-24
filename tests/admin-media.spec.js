@@ -102,6 +102,101 @@ test('check-in core adds applicants and validates a personal QR token', async ({
   await expect(page.locator('.checkin-applicant-list article').filter({ hasText: '정하린' })).toContainText('입장');
 });
 
+test('Join QR shows verification immediately and does not wait for a pass lookup', async ({ page }) => {
+  await page.getByPlaceholder('Join salonEvents 문서 ID').fill('join_salon_demo');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  let releaseConfirmation;
+  const confirmation = new Promise((resolve) => { releaseConfirmation = resolve; });
+  let lookupCount = 0;
+  await page.route('**/.netlify/functions/join-salon-pass', async (route) => {
+    lookupCount += 1;
+    await route.fulfill({ status: 500, body: 'Pass lookup should not be needed' });
+  });
+  await page.route('**/.netlify/functions/confirm-join-checkin', async (route) => {
+    await confirmation;
+    await route.fulfill({ json: {
+      ok: true,
+      duplicate: false,
+      status: 'checked_in',
+      checkedInAt: '2026-09-24T09:00:00.000Z',
+      notificationStatus: 'pending',
+      participant: { id: 'join_application_1', name: '정하린' },
+    } });
+  });
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await page.getByPlaceholder('QR URL, applicationId, token').fill(`https://join.unframe.kr/salon/check-in-token?token=${'a'.repeat(40)}`);
+  await page.getByRole('button', { name: '체크인 처리' }).click();
+  await expect(page.locator('.checkin-result')).toContainText('QR 인식 완료');
+  releaseConfirmation();
+  await expect(page.locator('.checkin-result')).toContainText('정하린님 입장 완료');
+  await expect(page.locator('.checkin-result')).toContainText('환영 알림톡을 발송하고 있어요.');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.checkinApplications.find((item) => item.joinParticipantId === 'join_application_1')?.checkedIn)).toBe(true);
+  expect(lookupCount).toBe(0);
+});
+
+test('camera freezes and highlights the decoded QR until Join confirms admission', async ({ page }) => {
+  await page.getByPlaceholder('Join salonEvents 문서 ID').fill('join_salon_demo');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  let releaseConfirmation;
+  const confirmation = new Promise((resolve) => { releaseConfirmation = resolve; });
+  let confirmationCount = 0;
+  await page.route('**/.netlify/functions/confirm-join-checkin', async (route) => {
+    confirmationCount += 1;
+    await confirmation;
+    await route.fulfill({ json: {
+      ok: true,
+      status: 'checked_in',
+      checkedInAt: '2026-09-24T09:00:00.000Z',
+      participant: { id: 'join_camera_guest', name: '지은' },
+    } });
+  });
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    const source = document.createElement('canvas');
+    source.width = 320;
+    source.height = 240;
+    const context = source.getContext('2d');
+    const draw = () => {
+      context.fillStyle = '#233044';
+      context.fillRect(0, 0, 320, 240);
+      context.fillStyle = '#fafafa';
+      context.fillRect(100, 60, 120, 120);
+      context.fillStyle = '#111';
+      context.fillRect(120, 80, 80, 80);
+    };
+    draw();
+    window.setInterval(draw, 100);
+    const stream = source.captureStream(10);
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => stream });
+    window.BarcodeDetector = class {
+      async detect() {
+        return [{
+          rawValue: `https://join.unframe.kr/salon/check-in-token?token=${'a'.repeat(40)}`,
+          cornerPoints: [{ x: 100, y: 60 }, { x: 220, y: 60 }, { x: 220, y: 180 }, { x: 100, y: 180 }],
+        }];
+      }
+    };
+  });
+  await page.getByRole('button', { name: '후면카메라 스캔 시작' }).click();
+  await expect(page.locator('.checkin-camera.is-frozen')).toBeVisible();
+  await expect(page.locator('.checkin-camera')).toContainText('이제 휴대폰을 내려도 됩니다.');
+  const highlighted = await page.locator('.checkin-captured-frame').evaluate((canvas) => {
+    const pixel = canvas.getContext('2d').getImageData(82, 42, 1, 1).data;
+    return canvas.width === 320 && pixel[1] > pixel[0];
+  });
+  expect(highlighted).toBe(true);
+  releaseConfirmation();
+  await expect(page.locator('.checkin-camera')).toContainText('지은님 입장 완료');
+  await expect(page.locator('.checkin-camera.is-frozen')).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('.checkin-camera.scanning')).toContainText('스캔 중');
+  await page.waitForTimeout(1400);
+  expect(confirmationCount).toBe(1);
+});
+
 test('poster palette is saved and applied to the session theme', async ({ page }) => {
   const before = await page.locator('main.admin-session').evaluate((node) => node.style.getPropertyValue('--accent'));
   await page.locator('.poster-zone input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: await imageBuffer(page) });

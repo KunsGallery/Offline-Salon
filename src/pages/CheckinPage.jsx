@@ -5,15 +5,15 @@ import { useSession } from '../hooks/useSession';
 import { getCurrentUser } from '../lib/auth';
 import { checkinSummary, createCheckinApplicationFromJoinPass, findCheckinApplication, parseCheckinPayload, sortCheckinApplications } from '../lib/checkin';
 import { formatDateTime } from '../lib/format';
-import { lookupJoinSalonPass } from '../lib/joinPass';
 import { confirmJoinCheckin } from '../lib/joinCheckin';
 import { realtime } from '../lib/realtime';
 import { sessionThemeStyle } from '../lib/colorPalette';
 
 function resultCopy(result) {
   if (!result) return { tone: 'idle', title: 'QR을 스캔해 주세요', body: 'join.unframe.kr에서 발급된 개인 QR 또는 체크인 토큰을 읽습니다.' };
-  if (result.status === 'checked-in') return { tone: 'success', title: `${result.application.name}님 입장 완료`, body: result.joinResult?.notificationStatus === 'pending' ? '입장은 완료되었습니다. 환영 알림톡을 발송하고 있어요.' : result.joinResult?.notificationStatus === 'failed' ? '입장은 완료되었습니다. 환영 알림톡 발송에 실패했습니다.' : result.imported ? `${result.application.joinSalonTitle || 'Join QR'}에서 확인해 Salon 출석 명단에 자동 등록했습니다.` : `${result.application.ticketType || '일반'} · 지금 체크인되었습니다.` };
-  if (result.status === 'already') return { tone: 'already', title: `${result.application.name}님은 이미 입장했어요`, body: result.joinResult?.notificationStatus === 'pending' ? '입장은 확인되었고 환영 알림톡을 발송하고 있어요.' : result.application.checkedInAt ? `${formatDateTime(result.application.checkedInAt)}에 체크인되었습니다.` : '이미 체크인된 신청자입니다.' };
+  if (result.status === 'checking') return { tone: 'idle', title: 'QR 인식 완료', body: '이제 휴대폰을 내려도 됩니다. Join에서 입장을 확인하고 있어요.' };
+  if (result.status === 'checked-in') return { tone: 'success', title: `${result.application.name}님 입장 완료`, body: result.salonSyncStatus === 'failed' ? 'Join 입장은 완료됐지만 Salon 명단 저장에 실패했습니다. 다시 저장해 주세요.' : result.salonSyncStatus === 'pending' ? 'Join 입장은 완료됐습니다. Salon 명단을 저장하고 있어요.' : result.joinResult?.notificationStatus === 'pending' ? '입장은 완료되었습니다. 환영 알림톡을 발송하고 있어요.' : result.joinResult?.notificationStatus === 'failed' ? '입장은 완료되었습니다. 환영 알림톡 발송에 실패했습니다.' : result.imported ? `${result.application.joinSalonTitle || 'Join QR'}에서 확인해 Salon 출석 명단에 자동 등록했습니다.` : `${result.application.ticketType || '일반'} · 지금 체크인되었습니다.` };
+  if (result.status === 'already') return { tone: 'already', title: `${result.application.name}님은 이미 입장했어요`, body: result.salonSyncStatus === 'failed' ? 'Join 입장은 확인됐지만 Salon 명단 저장에 실패했습니다. 다시 저장해 주세요.' : result.salonSyncStatus === 'pending' ? '기존 입장 기록을 Salon 명단에 저장하고 있어요.' : result.joinResult?.notificationStatus === 'pending' ? '입장은 확인되었고 환영 알림톡을 발송하고 있어요.' : result.application.checkedInAt ? `${formatDateTime(result.application.checkedInAt)}에 체크인되었습니다.` : '이미 체크인된 신청자입니다.' };
   if (result.status === 'cancelled') return { tone: 'error', title: '취소된 신청입니다', body: `${result.application.name}님의 신청 상태를 어드민에서 확인해 주세요.` };
   return { tone: 'error', title: 'QR을 확인하지 못했습니다', body: result.message || 'Join 개인 QR 또는 수동 명단 토큰을 확인해 주세요.' };
 }
@@ -97,16 +97,24 @@ const cameraFacingLabels = {
 export default function CheckinPage() {
   const { sessionId } = useParams();
   const videoRef = useRef(null);
+  const capturedFrameRef = useRef(null);
   const detectorRef = useRef(null);
   const zxingControlsRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(0);
   const lastCodeRef = useRef('');
+  const lastCodeSeenAtRef = useRef(0);
+  const checkinInFlightRef = useRef(false);
+  const scanFrozenRef = useRef(false);
+  const scanActiveRef = useRef(false);
+  const scanGenerationRef = useRef(0);
+  const resumeTimerRef = useRef(0);
   const audioContextRef = useRef(null);
   const { session, loading, error } = useSession(sessionId, { lightweight: true });
   const [manualValue, setManualValue] = useState('');
   const [scannerState, setScannerState] = useState('idle');
   const [scannerMessage, setScannerMessage] = useState('');
+  const [scanFrozen, setScanFrozen] = useState(false);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [celebrationKey, setCelebrationKey] = useState(0);
@@ -123,6 +131,9 @@ export default function CheckinPage() {
   const recent = applications.filter((item) => item.checkedIn).slice(0, 6);
 
   useEffect(() => () => {
+    scanActiveRef.current = false;
+    scanGenerationRef.current += 1;
+    window.clearTimeout(resumeTimerRef.current);
     window.cancelAnimationFrame(rafRef.current);
     zxingControlsRef.current?.stop?.();
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -146,36 +157,73 @@ export default function CheckinPage() {
     }
   };
 
+  const resumeScanAfter = (delay) => {
+    if (!scanFrozenRef.current) return;
+    window.clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = window.setTimeout(() => {
+      scanFrozenRef.current = false;
+      setScanFrozen(false);
+    }, delay);
+  };
+
+  const captureScan = (points = []) => {
+    const video = videoRef.current;
+    const canvas = capturedFrameRef.current;
+    if (!video?.videoWidth || !video?.videoHeight || !canvas) return;
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const validPoints = points.filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y));
+    const xs = validPoints.map((point) => point.x * scale);
+    const ys = validPoints.map((point) => point.y * scale);
+    const left = xs.length ? Math.min(...xs) : canvas.width * .34;
+    const top = ys.length ? Math.min(...ys) : canvas.height * .34;
+    const width = xs.length ? Math.max(...xs) - left : canvas.width * .32;
+    const height = ys.length ? Math.max(...ys) - top : canvas.height * .32;
+    const padding = Math.max(12, Math.max(width, height) * .15);
+    const frame = {
+      x: Math.max(0, left - padding),
+      y: Math.max(0, top - padding),
+      width: Math.min(canvas.width - Math.max(0, left - padding), width + padding * 2),
+      height: Math.min(canvas.height - Math.max(0, top - padding), height + padding * 2),
+    };
+    context.fillStyle = 'rgba(183, 255, 56, .14)';
+    context.fillRect(frame.x, frame.y, frame.width, frame.height);
+    context.strokeStyle = '#b7ff38';
+    context.lineWidth = Math.max(4, Math.min(canvas.width, canvas.height) * .008);
+    context.shadowColor = '#b7ff38';
+    context.shadowBlur = 24;
+    context.strokeRect(frame.x, frame.y, frame.width, frame.height);
+    scanFrozenRef.current = true;
+    setScanFrozen(true);
+  };
+
   const checkin = async (value) => {
     const raw = String(value || '').trim();
-    if (!raw || busy) return;
+    if (!raw || checkinInFlightRef.current) return;
+    checkinInFlightRef.current = true;
     setBusy(true);
+    setResult({ status: 'checking' });
     try {
-      const audioContext = await prepareAudio();
       const payload = parseCheckinPayload(raw);
       let next;
       if (payload.isJoinPayload || payload.token?.length >= 32) {
         if (!session.joinSalonId) throw new Error('이 세션에 Join 살롱 ID가 설정되지 않았습니다. 어드민 세션 설정에서 저장해 주세요.');
-        const [passLookup, checkinConfirmation] = await Promise.allSettled([
-          lookupJoinSalonPass(raw),
-          confirmJoinCheckin({ salonId: session.joinSalonId, qrPayload: raw }),
-        ]);
-        if (checkinConfirmation.status === 'rejected') throw checkinConfirmation.reason;
-        const joinResult = checkinConfirmation.value;
-        const joinPass = passLookup.status === 'fulfilled'
-          ? passLookup.value
-          : {
-            applicantDisplayName: joinResult.participant?.name || '참가자',
-            participantId: joinResult.participant?.id || '',
-            salonTitle: session.title,
-            eventDateTime: session.salonDate || '',
-            venueName: '',
-            tokenHash: '',
-            joinCheckedInAt: joinResult.checkedInAt || null,
-          };
+        const joinResult = await confirmJoinCheckin({ salonId: session.joinSalonId, qrPayload: raw });
+        const joinPass = {
+          applicantDisplayName: joinResult.participant?.name || '참가자',
+          participantId: joinResult.participant?.id || '',
+          salonTitle: session.title,
+          eventDateTime: session.salonDate || '',
+          venueName: '',
+          tokenHash: '',
+          joinCheckedInAt: joinResult.checkedInAt || null,
+        };
         const existing = findCheckinApplication(session.checkinApplications || [], {
-          joinTokenHash: joinPass.tokenHash,
-          joinParticipantId: joinResult.participant?.id || joinPass.participantId,
+          joinParticipantId: joinPass.participantId,
         });
         const imported = createCheckinApplicationFromJoinPass({
           ...joinPass,
@@ -187,79 +235,149 @@ export default function CheckinPage() {
         });
         if (!imported) throw new Error('Join 참가자 정보를 만들지 못했습니다.');
         const now = joinResult.checkedInAt || new Date().toISOString();
-        const application = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, {
+        const application = {
+          ...existing,
           ...imported,
           ...(existing ? { id: existing.id, createdAt: existing.createdAt } : {}),
+          joinTokenHash: imported.joinTokenHash || existing?.joinTokenHash || '',
+          joinShortCode: imported.joinShortCode || existing?.joinShortCode || '',
+          joinVenueName: imported.joinVenueName || existing?.joinVenueName || '',
+          importedAt: existing?.importedAt || imported.importedAt,
           checkedIn: true,
           checkedInAt: now,
           checkedInBy: getCurrentUser()?.email || getCurrentUser()?.uid || 'join-confirmed',
-        }));
-        next = { ok: true, status: joinResult.duplicate ? 'already' : 'checked-in', application, imported: !existing, joinPass, joinResult };
+        };
+        next = { ok: true, status: joinResult.duplicate ? 'already' : 'checked-in', application, imported: !existing, joinPass, joinResult, salonSyncStatus: 'pending' };
+        setResult(next);
+        resumeScanAfter(2200);
+        if (next.status === 'checked-in') setCelebrationKey((key) => key + 1);
+        void prepareAudio().then((audioContext) => playCheckinSound(audioContext, next.status)).catch(() => {});
+        if (next.status === 'checked-in') setManualValue('');
+        try {
+          const saved = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, application));
+          setResult({ ...next, application: saved, salonSyncStatus: 'saved' });
+        } catch (syncError) {
+          console.error('[CheckinPage] Salon attendance sync failed', syncError);
+          setResult({ ...next, salonSyncStatus: 'failed' });
+        }
+        return;
       } else {
         const user = getCurrentUser();
         next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
       }
       setResult(next);
+      resumeScanAfter(2200);
       if (next.status === 'checked-in') setCelebrationKey((value) => value + 1);
-      await playCheckinSound(audioContext, next.status);
+      void prepareAudio().then((audioContext) => playCheckinSound(audioContext, next.status)).catch(() => {});
       if (next.ok && next.status === 'checked-in') setManualValue('');
     } catch (reason) {
-      const failed = { ok: false, status: 'error', payload: { raw }, message: reason?.message || '체크인에 실패했습니다.' };
+      const failed = { ok: false, status: 'error', message: reason?.message || '체크인에 실패했습니다.' };
       setResult(failed);
-      await playCheckinSound(audioContextRef.current, failed.status);
+      resumeScanAfter(2500);
+      void prepareAudio().then((audioContext) => playCheckinSound(audioContext, failed.status)).catch(() => {});
     } finally {
       setBusy(false);
-      window.setTimeout(() => { lastCodeRef.current = ''; }, 1800);
+      checkinInFlightRef.current = false;
+    }
+  };
+
+  const acceptScan = (rawValue, points = []) => {
+    if (!scanActiveRef.current || scanFrozenRef.current) return;
+    if (!rawValue) {
+      if (lastCodeRef.current && Date.now() - lastCodeSeenAtRef.current > 900) lastCodeRef.current = '';
+      return;
+    }
+    if (rawValue === lastCodeRef.current) {
+      lastCodeSeenAtRef.current = Date.now();
+      return;
+    }
+    if (checkinInFlightRef.current) return;
+    lastCodeRef.current = rawValue;
+    lastCodeSeenAtRef.current = Date.now();
+    captureScan(points);
+    void checkin(rawValue);
+  };
+
+  const retrySalonSync = async () => {
+    if (checkinInFlightRef.current || result?.salonSyncStatus !== 'failed') return;
+    checkinInFlightRef.current = true;
+    setBusy(true);
+    const pending = { ...result, salonSyncStatus: 'pending' };
+    setResult(pending);
+    try {
+      const application = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, pending.application));
+      setResult({ ...pending, application, salonSyncStatus: 'saved' });
+    } catch (syncError) {
+      console.error('[CheckinPage] Salon attendance sync retry failed', syncError);
+      setResult({ ...pending, salonSyncStatus: 'failed' });
+    } finally {
+      setBusy(false);
+      checkinInFlightRef.current = false;
     }
   };
 
   const startCamera = async (preferredFacing = cameraFacing) => {
     try {
-      await prepareAudio();
-      setScannerState('starting');
+      void prepareAudio().catch(() => {});
       stopCamera();
-      setScannerState('scanning');
-      setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'}로 스캔합니다. 개인 QR을 화면 중앙에 맞춰 주세요.`);
+      setResult(null);
+      const generation = scanGenerationRef.current;
+      setScannerState('starting');
+      setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'}를 준비하고 있어요.`);
       const videoConstraints = { facingMode: { ideal: preferredFacing } };
       if (!('BarcodeDetector' in window)) {
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        if (generation !== scanGenerationRef.current) return;
         const reader = new BrowserMultiFormatReader();
+        scanActiveRef.current = true;
         const controls = await reader.decodeFromConstraints(
           { video: videoConstraints, audio: false },
           videoRef.current,
           (scanResult) => {
+            if (!scanActiveRef.current || generation !== scanGenerationRef.current) return;
             const rawValue = scanResult?.getText?.() || '';
-            if (rawValue && rawValue !== lastCodeRef.current) {
-              lastCodeRef.current = rawValue;
-              checkin(rawValue);
-            }
+            const points = scanResult?.getResultPoints?.()?.map((point) => ({ x: point.getX(), y: point.getY() })) || [];
+            acceptScan(rawValue, points);
           },
         );
+        if (generation !== scanGenerationRef.current) {
+          controls.stop?.();
+          return;
+        }
         zxingControlsRef.current = controls;
+        setScannerState('scanning');
         setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'} · 보조 스캐너로 QR을 읽고 있습니다. QR을 화면 중앙에 맞춰 주세요.`);
         return;
       }
       detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
       const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+      if (generation !== scanGenerationRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
+      if (generation !== scanGenerationRef.current) return;
+      setScannerState('scanning');
+      setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'}로 스캔합니다. 개인 QR을 화면 중앙에 맞춰 주세요.`);
       const tick = async () => {
-        if (!videoRef.current || scannerState === 'stopped') return;
+        if (!scanActiveRef.current || generation !== scanGenerationRef.current || !videoRef.current) return;
         try {
-          const codes = await detectorRef.current.detect(videoRef.current);
-          const rawValue = codes[0]?.rawValue || '';
-          if (rawValue && rawValue !== lastCodeRef.current) {
-            lastCodeRef.current = rawValue;
-            checkin(rawValue);
+          if (!scanFrozenRef.current) {
+            const codes = await detectorRef.current.detect(videoRef.current);
+            if (generation !== scanGenerationRef.current) return;
+            acceptScan(codes[0]?.rawValue || '', codes[0]?.cornerPoints || []);
           }
         } catch {
           // Detection can fail on a transient video frame.
         }
-        rafRef.current = window.requestAnimationFrame(tick);
+        if (scanActiveRef.current && generation === scanGenerationRef.current) rafRef.current = window.requestAnimationFrame(tick);
       };
+      scanActiveRef.current = true;
       rafRef.current = window.requestAnimationFrame(tick);
     } catch (reason) {
+      stopCamera();
       setScannerState('manual');
       setScannerMessage(reason?.name === 'NotAllowedError' ? '카메라 권한이 필요합니다. 권한을 허용하거나 수동 입력을 사용해 주세요.' : `카메라 스캔을 시작하지 못했습니다. 수동 입력을 사용해 주세요.${reason?.message ? ` (${reason.message})` : ''}`);
     }
@@ -277,6 +395,12 @@ export default function CheckinPage() {
   };
 
   const stopCamera = () => {
+    scanActiveRef.current = false;
+    scanGenerationRef.current += 1;
+    scanFrozenRef.current = false;
+    lastCodeRef.current = '';
+    window.clearTimeout(resumeTimerRef.current);
+    setScanFrozen(false);
     window.cancelAnimationFrame(rafRef.current);
     zxingControlsRef.current?.stop?.();
     zxingControlsRef.current = null;
@@ -292,6 +416,7 @@ export default function CheckinPage() {
 
   const copy = resultCopy(result);
   const parsed = parseCheckinPayload(manualValue);
+  const waitingForSalonSync = busy && !scanFrozen && result?.salonSyncStatus === 'pending';
 
   return <main className="checkin-shell" style={sessionThemeStyle(session)}>
     <section className="checkin-hero">
@@ -300,11 +425,12 @@ export default function CheckinPage() {
     </section>
     <section className="checkin-grid">
       <div className="checkin-scanner-card">
-        <div className={`checkin-camera ${scannerState}`}>
+        <div className={`checkin-camera ${scannerState}${scanFrozen ? ` is-frozen phase-${result?.status || 'checking'}` : ''}`}>
           <video ref={videoRef} muted playsInline />
-          <div><strong>{scannerState === 'scanning' ? '스캔 중' : 'QR 스캐너'}</strong><span>{scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
+          <canvas ref={capturedFrameRef} className="checkin-captured-frame" aria-hidden="true" />
+          <div><strong>{scanFrozen ? copy.title : waitingForSalonSync ? '다음 입장 준비 중' : scannerState === 'scanning' ? '스캔 중' : result?.status ? copy.title : 'QR 스캐너'}</strong><span>{scanFrozen ? copy.body : waitingForSalonSync ? 'Salon 명단을 저장하고 있어요.' : scannerState === 'scanning' ? scannerMessage : result?.status ? copy.body : scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
         </div>
-        <div className="checkin-actions"><button type="button" onClick={() => startCamera()} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : `${cameraFacingLabels[cameraFacing]} 스캔 시작`}</button><button className="checkin-secondary-action" type="button" onClick={switchCamera} disabled={scannerState === 'starting'}>{cameraFacing === 'environment' ? '전면으로 전환' : '후면으로 전환'}</button><button className="checkin-secondary-action" type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
+        <div className="checkin-actions"><button type="button" onClick={() => startCamera()} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : `${cameraFacingLabels[cameraFacing]} 스캔 시작`}</button><button className="checkin-secondary-action" type="button" onClick={switchCamera} disabled={scannerState === 'starting' || busy}>{cameraFacing === 'environment' ? '전면으로 전환' : '후면으로 전환'}</button><button className="checkin-secondary-action" type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
         <form className="checkin-manual" onSubmit={(event) => { event.preventDefault(); checkin(manualValue); }}>
           <label><span>수동 체크인</span><input value={manualValue} onChange={(event) => setManualValue(event.target.value)} placeholder="QR URL, applicationId, token" /></label>
           <small>{parsed.token || parsed.applicationId ? (parsed.isJoinPayload ? 'Join QR 값을 인식했습니다. 서버 검증을 진행할 수 있습니다.' : '체크인 값을 인식했습니다.') : 'Join 패스 링크나 체크인 QR 값을 붙여넣어도 됩니다.'}</small>
@@ -313,9 +439,10 @@ export default function CheckinPage() {
       </div>
       <aside className={`checkin-result ${copy.tone}`} aria-live="polite">
         {copy.tone === 'success' && celebrationKey ? <CheckinCelebration key={celebrationKey} /> : null}
-        <span>{copy.tone === 'success' ? 'WELCOME' : copy.tone === 'already' ? 'ALREADY IN' : copy.tone === 'error' ? 'CHECK NEEDED' : 'READY'}</span>
+        <span>{result?.status === 'checking' ? 'VERIFYING' : copy.tone === 'success' ? 'WELCOME' : copy.tone === 'already' ? 'ALREADY IN' : copy.tone === 'error' ? 'CHECK NEEDED' : 'READY'}</span>
         <h2>{copy.title}</h2>
         <p>{copy.body}</p>
+        {result?.salonSyncStatus === 'failed' ? <button type="button" onClick={retrySalonSync} disabled={busy}>Salon 명단 다시 저장</button> : null}
       </aside>
       <section className="checkin-recent">
         <header><h2>최근 입장</h2><span>{summary.waiting}명 대기</span></header>
