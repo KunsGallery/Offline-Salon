@@ -118,9 +118,11 @@ test('nickname remains legible when a dark poster theme is active', async ({ pag
   expect(colors.fill).toBe('rgb(17, 24, 39)');
 
   await expect(page.locator('.avatar-builder')).toBeVisible();
-  await page.getByRole('button', { name: '모스' }).click();
+  await page.getByRole('button', { name: '양 · 직물 수집가' }).click();
+  await page.getByRole('button', { name: '여성형' }).click();
   await page.getByRole('button', { name: '이 캐릭터로 입장' }).click();
   await expect(page.getByRole('heading', { name: '오늘 작품을 보며 가장 오래 머문 생각은 무엇인가요?' })).toBeVisible();
+  await expect(page.locator('.participant-avatar-edit-inline .salon-avatar.illustrated')).toHaveAttribute('aria-label', /양 여성형 캐릭터/);
   expect(consoleErrors.filter((message) => message.includes('Maximum update depth exceeded'))).toEqual([]);
 });
 
@@ -285,6 +287,7 @@ test('participant can return after reset and edit the shared character', async (
     localStorage.setItem(key, JSON.stringify(value));
     localStorage.setItem('offline-salon:participantId:session_roundtable', 'old_guest');
     localStorage.setItem('offline-salon:nickname:session_roundtable', '재입장');
+    localStorage.setItem('offline-salon:avatar', JSON.stringify({ version: 2, shape: 'round', color: 'cobalt', expression: 'smile', accessory: 'none' }));
   }, { key: STORAGE_KEY, value: state });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/client/session_roundtable');
@@ -305,6 +308,33 @@ test('participant can return after reset and edit the shared character', async (
   await page.getByRole('button', { name: '변경 저장' }).click();
   await expect(page.locator('.pear-avatar-edit-button .avatar-accessory-tool')).toBeVisible();
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_roundtable.participants.old_guest.avatar.accessory, STORAGE_KEY)).toBe('magnifier');
+});
+
+test('animal character keeps its look and session prop when edited', async ({ page }) => {
+  const state = roundtableState(0);
+  const session = state.sessions.session_roundtable;
+  session.currentQuestionId = null;
+  session.questions = [];
+  session.stage = { mode: 'lobby', page: 1, blackout: false };
+  session.enabledModules = ['pear-play'];
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_roundtable');
+  await page.getByRole('textbox', { name: '닉네임' }).fill('탐사자');
+  await page.getByRole('button', { name: '토끼 · 식물 산책가' }).click();
+  await page.getByRole('button', { name: '여성형' }).click();
+  await page.getByRole('button', { name: '소품 꾸미기' }).click();
+  await page.getByRole('group', { name: '기본 소품' }).getByRole('button', { name: '회중시계' }).click();
+  await page.getByRole('group', { name: '이번 모임 소품' }).getByRole('button', { name: '단서 수첩' }).click();
+  await page.getByRole('button', { name: '이 캐릭터로 입장' }).click();
+  await expect(page.locator('.pear-avatar-edit-button .salon-avatar.illustrated')).toHaveAttribute('aria-label', /토끼 여성형 캐릭터, 회중시계와 단서 수첩/);
+  await page.getByRole('button', { name: '내 캐릭터 수정' }).click();
+  await page.getByRole('button', { name: '변경 저장' }).click();
+  const avatar = await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key)).sessions.session_roundtable;
+    return Object.values(session.participants).find((participant) => participant.nickname === '탐사자').avatar;
+  }, STORAGE_KEY);
+  expect(avatar).toMatchObject({ version: 3, species: 'rabbit', variant: 'female', baseProp: 'pocket-watch', eventProp: 'notebook', moduleProps: { 'pear-play': 'notebook' } });
 });
 
 test('selected PEAR PLAY photograph shows its participant character', async ({ page }) => {

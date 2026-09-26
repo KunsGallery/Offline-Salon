@@ -1,11 +1,47 @@
 import React from 'react';
-import { AVATAR_COLORS, normalizeAvatar } from '../../lib/avatar';
+import { AVATAR_COLORS, AVATAR_PROPS, AVATAR_SPECIES, AVATAR_VARIANTS, normalizeAvatar } from '../../lib/avatar';
 
-export { AVATAR_COLORS, AVATAR_SHAPES, AVATAR_EXPRESSIONS, DEFAULT_AVATAR } from '../../lib/avatar';
+export { AVATAR_COLORS, AVATAR_SHAPES, AVATAR_EXPRESSIONS, DEFAULT_AVATAR, AVATAR_SPECIES, AVATAR_VARIANTS } from '../../lib/avatar';
 
 export function resolveAvatar(avatar) {
   const resolved = normalizeAvatar(avatar);
+  if (resolved.version === 3) return resolved;
   return { ...resolved, ...AVATAR_COLORS.find((item) => item.id === resolved.color) };
+}
+
+function spriteStyle(index, compact = false) {
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  const crop = compact ? 250 : 362;
+  const inset = compact ? 56 : 0;
+  return {
+    width: `${(1448 / crop) * 100}%`,
+    left: `${-((column * 362 + inset) / crop) * 100}%`,
+    top: `${-((row * 362 + (compact ? 12 : 0)) / crop) * 100}%`,
+  };
+}
+
+export function AvatarPropArt({ id }) {
+  const prop = AVATAR_PROPS.find((item) => item.id === id);
+  if (!prop || prop.index === undefined) return null;
+  return <span className="avatar-prop-art" aria-hidden="true"><img src="/avatars/props.webp" alt="" style={spriteStyle(prop.index)} /></span>;
+}
+
+function ZodiacAvatar({ avatar, label, compact }) {
+  const speciesIndex = AVATAR_SPECIES.findIndex((item) => item.id === avatar.species);
+  const species = AVATAR_SPECIES[speciesIndex];
+  const variant = AVATAR_VARIANTS.find((item) => item.id === avatar.variant);
+  const index = (speciesIndex % 6) * 2 + (avatar.variant === 'female' ? 1 : 0);
+  const sheet = speciesIndex < 6 ? '01' : '02';
+  const propNames = [avatar.baseProp, avatar.eventProp].filter((id) => id && id !== 'none')
+    .map((id) => AVATAR_PROPS.find((item) => item.id === id)?.label).filter(Boolean);
+  const description = `${label ? `${label}, ` : ''}${species.label} ${variant.label} 캐릭터${propNames.length ? `, ${propNames.join('와 ')}` : ''}`;
+  return <span className={`salon-avatar illustrated ${compact ? 'compact' : ''}`} role="img" aria-label={description}>
+    <span className="avatar-art-window"><img src={`/avatars/zodiac-${sheet}.webp`} alt="" aria-hidden="true" style={spriteStyle(index, compact)} /></span>
+    {avatar.baseProp !== 'none' ? <span className="avatar-equipped-prop is-base"><AvatarPropArt id={avatar.baseProp} /></span> : null}
+    {avatar.eventProp !== 'none' ? <span className="avatar-equipped-prop is-event"><AvatarPropArt id={avatar.eventProp} /></span> : null}
+    {label ? <b aria-hidden="true">{label}</b> : null}
+  </span>;
 }
 
 function AvatarAccessory({ type }) {
@@ -22,6 +58,7 @@ function AvatarAccessory({ type }) {
 
 export default function SalonAvatar({ avatar, label = '', compact = false }) {
   const resolved = resolveAvatar(avatar);
+  if (resolved.version === 3) return <ZodiacAvatar avatar={resolved} label={label} compact={compact} />;
   const head = resolved.shape === 'arch'
     ? <path d="M22 43V28C22 14.7 32.7 4 46 4s24 10.7 24 24v15H22Z" />
     : resolved.shape === 'diamond'
