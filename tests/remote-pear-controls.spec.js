@@ -88,6 +88,12 @@ test('artwork reveal and connection stay on the rabbit detective board', async (
   await page.getByRole('button', { name: '찾은 작품 공개' }).click();
   await expect(host.locator('.pear-host-selected')).toBeVisible();
   await expect(host.locator('.pear-board-pair img')).toHaveCount(2);
+  const pinPosition = await host.locator('.pear-board-image').first().evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const pinTop = Number.parseFloat(getComputedStyle(element, '::before').top);
+    return { imageTop: box.top, pinTop: box.top + pinTop };
+  });
+  expect(pinPosition.pinTop).toBeGreaterThan(pinPosition.imageTop);
   await expect(host.locator('.pear-board-artwork figcaption')).toContainText('30 × 40 cm');
   await expect(host.locator('.pear-board-artwork figcaption')).toContainText('캔버스에 유채');
   await expect(host.locator('.pear-host-reveal-stage')).toHaveCount(0);
@@ -107,6 +113,57 @@ test('artwork reveal and connection stay on the rabbit detective board', async (
   expect(mapBottom).toBeLessThan(900 * .75);
   await expect.poll(() => host.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false);
   await host.close();
+});
+
+test('submitted participant cannot replace the photo and sees Detective P during investigation', async ({ page }) => {
+  const state = pearSession();
+  state.sessions.session_pear_remote.stage = { mode: 'pear-play', pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'verifying', pearInvestigationClue: '편지 · 따뜻한 갈색', pearParticipantId: 'guest_one' };
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
+    localStorage.setItem('offline-salon:nickname:session_pear_remote', '호야');
+  }, { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_pear_remote');
+  await expect(page.locator('.pear-investigation-detective')).toBeVisible();
+  await expect(page.locator('.pear-investigation-mobile')).toContainText('편지 · 따뜻한 갈색');
+  await expect(page.getByRole('button', { name: /다른 사진|새 사진/ })).toHaveCount(0);
+  await expect(page.locator('.pear-investigation-mobile .pear-detective-mark')).toHaveCount(0);
+});
+
+test('submitted photo remains read-only while waiting for host', async ({ page }) => {
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
+    localStorage.setItem('offline-salon:nickname:session_pear_remote', '호야');
+  }, { key: STORAGE_KEY, value: pearSession() });
+  await page.goto('/client/session_pear_remote');
+  await expect(page.getByRole('heading', { name: /사진이 사건 보관함에/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /다른 사진|새 사진|사진 접수하기/ })).toHaveCount(0);
+  await expect(page.locator('.pear-participant-waiting')).toContainText('접수된 사진은 변경할 수 없습니다');
+});
+
+test('photo intake shows progress and locks the accepted upload', async ({ page }) => {
+  const state = pearSession();
+  state.sessions.session_pear_remote.participants.guest_one.pearPairing = null;
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
+    localStorage.setItem('offline-salon:nickname:session_pear_remote', '호야');
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function delayedToBlob(callback, ...args) {
+      return toBlob.call(this, (blob) => window.setTimeout(() => callback(blob), 900), ...args);
+    };
+  }, { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/client/session_pear_remote');
+  await page.locator('.pear-upload-panel input[type=file]').first().setInputFiles('public/pear-play/envelope-open-original.webp');
+  await expect(page.locator('.pear-envelope-front-layer')).toBeVisible();
+  await page.getByRole('button', { name: '사진 접수하기' }).click();
+  await expect(page.getByRole('status')).toContainText('사진을 준비하고 있어요');
+  await expect(page.getByRole('progressbar', { name: '사진 업로드 진행률' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /사진이 사건 보관함에/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /다른 사진|새 사진|사진 접수하기/ })).toHaveCount(0);
 });
 
 test('opening the participant page does not change the live host stage', async ({ page }) => {
@@ -129,4 +186,57 @@ test('offline commands explain why the live screen did not change', async ({ pag
   await page.getByRole('button', { name: '현장 사진 공개', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('인터넷 연결이 끊겼습니다');
   await context.setOffline(false);
+});
+
+test('new evidence is pinned by the assistant once and remains on the wall after case navigation', async ({ page, context }) => {
+  await page.addInitScript(({ key, state }) => localStorage.setItem(key, JSON.stringify(state)), { key: STORAGE_KEY, state: pearSession() });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_pear_remote');
+  await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(2);
+  await expect(page.locator('.pear-board-assistant:not(.is-pinning)')).toBeVisible();
+  await expect(page.locator('.pear-pinning-action')).toHaveCount(0);
+
+  const writer = await context.newPage();
+  await writer.goto('/remote/session_pear_remote');
+  await writer.evaluate(({ key, photo }) => {
+    const state = JSON.parse(localStorage.getItem(key));
+    state.sessions.session_pear_remote.participants.guest_three = {
+      participantId: 'guest_three', nickname: '새 손님', pearPairing: { photoUrl: photo, status: 'uploaded' },
+    };
+    state.sessions.session_pear_remote.participants.guest_four = {
+      participantId: 'guest_four', nickname: '다음 손님', pearPairing: { photoUrl: photo, status: 'uploaded' },
+    };
+    localStorage.setItem(key, JSON.stringify(state));
+  }, { key: STORAGE_KEY, photo: PHOTO });
+  await expect(page.locator('.pear-board-assistant.is-pinning.is-left')).toBeVisible();
+  await expect(page.locator('.pear-board-assistant-held-photo')).toBeVisible();
+  await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(1);
+  await page.waitForTimeout(650);
+  const leftReach = await page.evaluate(() => {
+    const card = document.querySelector('.pear-evidence-note.is-pinning').getBoundingClientRect();
+    const held = document.querySelector('.pear-board-assistant-held-photo').getBoundingClientRect();
+    return Math.hypot(card.left + card.width / 2 - (held.left + held.width / 2), card.top - held.top);
+  });
+  expect(leftReach).toBeLessThan(70);
+  await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(3);
+  await expect(page.locator('.pear-board-assistant.is-pinning.is-right')).toBeVisible();
+  await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(1);
+  await page.waitForTimeout(650);
+  const rightReach = await page.evaluate(() => {
+    const card = document.querySelector('.pear-evidence-note.is-pinning').getBoundingClientRect();
+    const held = document.querySelector('.pear-board-assistant-held-photo').getBoundingClientRect();
+    return Math.hypot(card.left + card.width / 2 - (held.left + held.width / 2), card.top - held.top);
+  });
+  expect(rightReach).toBeLessThan(70);
+  await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(4);
+  await expect(page.locator('.pear-board-assistant:not(.is-pinning)')).toBeVisible();
+
+  await writer.reload();
+  await writer.getByRole('button', { name: /호야 사진 접수 완료/ }).click();
+  await expect(page.locator('.pear-host-selected')).toBeVisible();
+  await writer.getByRole('button', { name: '전체 코르크 보드', exact: true }).click();
+  await expect(page.locator('.pear-host-wall')).toBeVisible();
+  await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(4);
+  await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(0);
+  await writer.close();
 });

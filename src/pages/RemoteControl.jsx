@@ -98,22 +98,32 @@ export default function RemoteControl() {
     const investigatingStage = { ...stage, mode: 'pear-play', pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'observing', blackout: false };
     await realtime.updateSession(session.id, { currentQuestionId: null, stage: investigatingStage, status: 'live' });
     let currentStep = 'observing';
+    let stepStartedAt = Date.now();
     try {
       const pairing = await requestPearPairing({
         sessionId,
         participantId: participant.participantId,
         photoUrl: selectedPairing.photoUrl,
-        onProgress: async ({ phase }) => {
+        onProgress: async ({ phase, pairing: progressPairing }) => {
           const pearInvestigationStep = phase;
           if (pearInvestigationStep === currentStep) return;
+          const remaining = 1800 - (Date.now() - stepStartedAt);
+          if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
           currentStep = pearInvestigationStep;
+          const pearInvestigationClue = progressPairing ? [
+            progressPairing.analysis?.objects?.[0],
+            progressPairing.analysis?.colors?.[0],
+          ].filter(Boolean).join(' · ') : '';
           await realtime.updateSession(session.id, {
             currentQuestionId: null,
-            stage: { ...investigatingStage, pearInvestigationStep },
+            stage: { ...investigatingStage, pearInvestigationStep, pearInvestigationClue },
             status: 'live',
           });
+          stepStartedAt = Date.now();
         },
       });
+      const remaining = 1800 - (Date.now() - stepStartedAt);
+      if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: {

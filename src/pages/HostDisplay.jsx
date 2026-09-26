@@ -131,7 +131,7 @@ export default function HostDisplay() {
   }
 
   if (session.stage?.mode === 'pear-play' && hasSessionModule(session, 'pear-play')) {
-    return <div style={sessionThemeStyle(session)}><PearPlayHostView session={session} participants={participants} /></div>;
+    return <div style={sessionThemeStyle(session)}><PearPlayHostView session={session} participants={participants} participantsLoading={participantsLoading} /></div>;
   }
 
   if (session.stage?.mode === 'lobby' || !activeQuestion) {

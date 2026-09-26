@@ -270,6 +270,7 @@ export function normalizeSession(session) {
       pearParticipantId: session.stage?.pearParticipantId || null,
       pearPhase: session.stage?.pearPhase || 'idle',
       pearInvestigationStep: session.stage?.pearInvestigationStep || 'idle',
+      pearInvestigationClue: session.stage?.pearInvestigationClue || '',
       pearView: session.stage?.pearView || 'case',
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),

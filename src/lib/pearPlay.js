@@ -21,20 +21,25 @@ async function requestPearApi(payload) {
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export async function requestPearPairing({ sessionId, participantId, photoUrl, onProgress }) {
-  const reportProgress = async (phase) => {
-    await onProgress?.({ phase });
+  const reportProgress = async (phase, pairing = null) => {
+    await onProgress?.({ phase, pairing });
   };
   const started = await requestPearApi({ action: 'start', sessionId, participantId, photoUrl });
-  if (started.status === 'completed' && started.pairing) return started.pairing;
+  await reportProgress('searching');
+  if (started.status === 'completed' && started.pairing) {
+    await reportProgress('verifying', started.pairing);
+    return started.pairing;
+  }
   if (!started.responseId) throw new Error('AI 분석 작업을 시작하지 못했습니다.');
-  await reportProgress(started.investigationStep || 'observing');
 
   // The OpenAI job can outlive a single Netlify function invocation, so each poll is a short request.
   for (let attempt = 0; attempt < 100; attempt += 1) {
     await wait(1500);
     const result = await requestPearApi({ action: 'poll', responseId: started.responseId, photoUrl });
-    if (result.status === 'completed' && result.pairing) return result.pairing;
-    await reportProgress(result.investigationStep || 'observing');
+    if (result.status === 'completed' && result.pairing) {
+      await reportProgress('verifying', result.pairing);
+      return result.pairing;
+    }
   }
 
   const error = new Error('사진 분석이 예상보다 오래 걸리고 있습니다. 잠시 후 다시 시도해 주세요.');

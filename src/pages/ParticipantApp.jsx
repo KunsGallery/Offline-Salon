@@ -296,9 +296,11 @@ export default function ParticipantApp() {
     await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, { nickname, grapeSelections }));
   };
 
-  const handleSavePearPairing = async (file) => {
+  const handleSavePearPairing = async (file, onProgress) => {
+    if (participant?.pearPairing?.photoUrl) throw new Error('이미 접수된 사진은 변경할 수 없습니다.');
     const pairingId = createId('pear');
-    const uploaded = await uploadParticipantPhoto(sessionId, pairingId, file, { activity: 'pear' });
+    const uploaded = await uploadParticipantPhoto(sessionId, pairingId, file, { activity: 'pear', onProgress });
+    onProgress?.(100);
     await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, {
       nickname,
       pearPairing: {
