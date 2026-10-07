@@ -225,3 +225,9 @@ PPTX는 현재 지원하지 않습니다.
 Salon Netlify에는 `JOIN_CHECKIN_SHARED_SECRET`을 등록하고, Join Netlify에는 같은 값을 `SALON_CHECKIN_SHARED_SECRET`으로 등록합니다. 이 값은 기존에 찾아오는 시크릿이 아니라 두 프로젝트가 공유할 새 랜덤 문자열입니다. 예를 들어 터미널에서 `openssl rand -hex 32`로 생성할 수 있으며, 브라우저 환경변수(`VITE_` 접두사)로 등록하면 안 됩니다.
 
 Join QR 체크인 요청은 Salon 서버 함수가 처리합니다. Join 검증이 성공하거나 이미 체크인된 상태일 때만 Salon 출석 명단을 갱신하며, 알림톡 발송 실패는 입장 완료와 별도로 명단에서 확인할 수 있습니다.
+
+입장 완료는 Join 출석 트랜잭션 응답 직후 표시하고, Salon 명단 저장은 순차적으로 진행합니다. 저장 실패한 참가자는 최근 입장 영역의 재시도 목록에 남으며, 다음 참가자의 QR 스캔을 막지 않습니다. 여러 체크인 기기의 명단 저장은 Firestore 트랜잭션으로 병합합니다. QR 인식 순간 화면을 정지하고 표시하며, 입장 확인 후 1.2초에 스캔을 재개합니다.
+
+브라우저 콘솔의 `[checkin-timing]`에는 QR 디코드(기본 스캐너), Join 응답, Salon 명단 저장 시간이 기록됩니다. Salon 응답의 `Server-Timing`에는 Join 조회·출석 트랜잭션·프록시 요청 시간이 포함됩니다. QR 원문과 참가자 개인정보는 성능 로그에 기록하지 않습니다. Join은 Request/Context 함수 형식으로 배포해야 `context.waitUntil()`을 통해 환영 알림 발송을 응답 이후에도 실행할 수 있습니다.
+
+체크인 화면 회귀 테스트: `VITE_REALTIME_MODE=local npm run test:e2e -- tests/admin-media.spec.js --grep 'check-in core|Join QR|camera freezes|Salon saves|QR-only fallback'`.

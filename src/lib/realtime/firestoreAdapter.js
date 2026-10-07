@@ -345,24 +345,28 @@ const firestoreAdapter = {
 
   async upsertCheckinApplication(sessionId, input = {}) {
     requireAdminWrite();
-    const session = await readSessionDoc(sessionId);
-    if (!session) throw new Error('세션을 찾을 수 없습니다.');
-    const now = new Date().toISOString();
     const id = input.id || createId('application');
-    const previous = (session.checkinApplications || []).find((item) => item.id === id);
-    const application = normalizeCheckinApplication({
-      ...previous,
-      ...input,
-      id,
-      checkinToken: input.checkinToken || previous?.checkinToken || createCheckinToken(id),
-      createdAt: previous?.createdAt || now,
-      updatedAt: now,
+    return runTransaction(ensureDb(), async (transaction) => {
+      const sessionRef = sessionDocRef(sessionId);
+      const snap = await transaction.get(sessionRef);
+      if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
+      const session = fromSessionDoc(snap.id, snap.data());
+      const now = new Date().toISOString();
+      const previous = (session.checkinApplications || []).find((item) => item.id === id);
+      const application = normalizeCheckinApplication({
+        ...previous,
+        ...input,
+        id,
+        checkinToken: input.checkinToken || previous?.checkinToken || createCheckinToken(id),
+        createdAt: previous?.createdAt || now,
+        updatedAt: now,
+      });
+      const nextApplications = previous
+        ? session.checkinApplications.map((item) => item.id === id ? application : item)
+        : [...(session.checkinApplications || []), application];
+      transaction.update(sessionRef, { checkinApplications: nextApplications, updatedAt: serverTimestamp() });
+      return application;
     });
-    const nextApplications = previous
-      ? session.checkinApplications.map((item) => item.id === id ? application : item)
-      : [...(session.checkinApplications || []), application];
-    await updateDoc(sessionDocRef(sessionId), { checkinApplications: nextApplications, updatedAt: serverTimestamp() });
-    return application;
   },
 
   async deleteCheckinApplication(sessionId, applicationId) {

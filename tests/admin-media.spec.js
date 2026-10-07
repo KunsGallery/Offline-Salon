@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import zxing from '@zxing/library';
+
+const { BarcodeFormat, QRCodeWriter } = zxing;
 
 async function imageBuffer(page, color = '#cf248d') {
   const dataUrl = await page.evaluate((fill) => {
@@ -135,6 +138,104 @@ test('Join QR shows verification immediately and does not wait for a pass lookup
   await expect(page.locator('.checkin-result')).toContainText('환영 알림톡을 발송하고 있어요.');
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('offline-salon:interactive-studio-pro:v1')).sessions.session_demo.checkinApplications.find((item) => item.joinParticipantId === 'join_application_1')?.checkedIn)).toBe(true);
   expect(lookupCount).toBe(0);
+});
+
+test('slow Salon saves do not block admission or overwrite the next guest', async ({ page }) => {
+  await page.getByPlaceholder('Join salonEvents 문서 ID').fill('join_salon_demo');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await page.evaluate(async () => {
+    const { realtime } = await import('/src/lib/realtime/index.js');
+    const original = realtime.upsertCheckinApplication.bind(realtime);
+    let saveCount = 0;
+    realtime.upsertCheckinApplication = async (...args) => {
+      if (++saveCount === 1) await new Promise((resolve) => { window.releaseSalonSave = resolve; });
+      return original(...args);
+    };
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  let guest = 0;
+  await page.route('**/.netlify/functions/confirm-join-checkin', (route) => {
+    guest += 1;
+    return route.fulfill({ json: { ok: true, checkedInAt: new Date().toISOString(), participant: { id: `guest_${guest}`, name: `손님${guest}` } } });
+  });
+  const input = page.getByPlaceholder('QR URL, applicationId, token');
+  await input.fill('a'.repeat(40));
+  await page.getByRole('button', { name: '체크인 처리', exact: true }).click();
+  await expect(page.locator('.checkin-result')).toContainText('손님1님 입장 완료');
+  await input.fill('b'.repeat(40));
+  await expect(page.getByRole('button', { name: '체크인 처리', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '체크인 처리', exact: true }).click();
+  await expect(page.locator('.checkin-result')).toContainText('손님2님 입장 완료');
+  await page.evaluate(() => window.releaseSalonSave());
+  await expect(page.locator('.checkin-recent')).toContainText('손님1');
+  await expect(page.locator('.checkin-recent')).toContainText('손님2');
+  await expect(page.locator('.checkin-result')).toContainText('손님2님 입장 완료');
+});
+
+test('failed Salon saves remain retryable after the next admission', async ({ page }) => {
+  await page.getByPlaceholder('Join salonEvents 문서 ID').fill('join_salon_demo');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await page.evaluate(async () => {
+    const { realtime } = await import('/src/lib/realtime/index.js');
+    const original = realtime.upsertCheckinApplication.bind(realtime);
+    let first = true;
+    realtime.upsertCheckinApplication = (...args) => {
+      if (first) { first = false; return Promise.reject(new Error('Simulated save failure')); }
+      return original(...args);
+    };
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  let guest = 0;
+  await page.route('**/.netlify/functions/confirm-join-checkin', (route) => {
+    guest += 1;
+    return route.fulfill({ json: { ok: true, participant: { id: `retry_${guest}`, name: `참가자${guest}` } } });
+  });
+  const input = page.getByPlaceholder('QR URL, applicationId, token');
+  await input.fill('a'.repeat(40));
+  await page.getByRole('button', { name: '체크인 처리', exact: true }).click();
+  await expect(page.getByRole('button', { name: '참가자1 · 명단 다시 저장' })).toBeVisible();
+  await input.fill('b'.repeat(40));
+  await page.getByRole('button', { name: '체크인 처리', exact: true }).click();
+  await expect(page.locator('.checkin-result')).toContainText('참가자2님 입장 완료');
+  await page.getByRole('button', { name: '참가자1 · 명단 다시 저장' }).click();
+  await expect(page.getByRole('button', { name: '참가자1 · 명단 다시 저장' })).toHaveCount(0);
+  await expect(page.locator('.checkin-result')).toContainText('참가자2님 입장 완료');
+  await expect(page.locator('.checkin-recent')).toContainText('참가자1');
+});
+
+test('QR-only fallback scanner reads a real QR without BarcodeDetector', async ({ page }) => {
+  await page.getByPlaceholder('Join salonEvents 문서 ID').fill('join_salon_demo');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  const raw = `https://join.unframe.kr/salon/check-in-token?token=${'a'.repeat(40)}`;
+  const matrix = new QRCodeWriter().encode(raw, BarcodeFormat.QR_CODE, 128, 128, new Map());
+  const pixels = Array.from({ length: matrix.getHeight() }, (_, y) => Array.from({ length: matrix.getWidth() }, (_, x) => matrix.get(x, y)));
+  await page.route('**/.netlify/functions/confirm-join-checkin', (route) => {
+    expect(route.request().postDataJSON().qrPayload).toBe(raw);
+    return route.fulfill({ json: { ok: true, participant: { id: 'fallback_guest', name: '보조스캔' } } });
+  });
+  await page.evaluate((pixels) => {
+    delete window.BarcodeDetector;
+    window.history.pushState({}, '', '/checkin/session_demo');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    const source = document.createElement('canvas');
+    source.width = source.height = pixels.length * 3;
+    const context = source.getContext('2d');
+    const draw = () => {
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, source.width, source.height);
+      context.fillStyle = '#000';
+      pixels.forEach((row, y) => row.forEach((dark, x) => { if (dark) context.fillRect(x * 3, y * 3, 3, 3); }));
+    };
+    draw();
+    window.setInterval(draw, 100);
+    const stream = source.captureStream(10);
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { configurable: true, value: async () => stream });
+  }, pixels);
+  await page.getByRole('button', { name: '후면카메라 스캔 시작' }).click();
+  await expect(page.locator('.checkin-result')).toContainText('보조스캔님 입장 완료');
+  await expect(page.locator('.checkin-camera.is-frozen')).toBeVisible();
 });
 
 test('camera freezes and highlights the decoded QR until Join confirms admission', async ({ page }) => {

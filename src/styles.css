@@ -1070,6 +1070,9 @@ button {
 .checkin-recent header { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
 .checkin-recent h2 { color: #fff; font-size: 1.1rem; }
 .checkin-recent header span, .checkin-recent p { color: rgba(255,255,255,.58); font-size: .72rem; }
+.checkin-recent [role="status"] { display: grid; gap: 8px; margin-bottom: 14px; }
+.checkin-recent button { min-height: 44px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; color: #fff; background: rgba(0,0,0,.18); text-align: left; font-weight: 750; }
+.checkin-recent button:disabled { opacity: .5; }
 .checkin-recent ol { display: grid; gap: 8px; list-style: none; }
 .checkin-recent li { display: grid; gap: 3px; padding: 11px 12px; border-radius: 12px; background: rgba(255,255,255,.08); }
 .checkin-recent strong { color: #fff; }

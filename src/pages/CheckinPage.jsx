@@ -110,6 +110,9 @@ export default function CheckinPage() {
   const scanGenerationRef = useRef(0);
   const resumeTimerRef = useRef(0);
   const audioContextRef = useRef(null);
+  const syncQueueRef = useRef(Promise.resolve());
+  const attemptRef = useRef(0);
+  const decodeDurationRef = useRef(null);
   const { session, loading, error } = useSession(sessionId, { lightweight: true });
   const [manualValue, setManualValue] = useState('');
   const [scannerState, setScannerState] = useState('idle');
@@ -117,6 +120,7 @@ export default function CheckinPage() {
   const [scanFrozen, setScanFrozen] = useState(false);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [failedSyncs, setFailedSyncs] = useState([]);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [cameraFacing, setCameraFacing] = useState(() => {
     if (typeof window === 'undefined') return 'environment';
@@ -201,10 +205,30 @@ export default function CheckinPage() {
     setScanFrozen(true);
   };
 
+  const syncSalonAttendance = (pending) => {
+    const task = syncQueueRef.current.then(async () => {
+      const startedAt = performance.now();
+      try {
+        const application = await realtime.upsertCheckinApplication(sessionId, pending.application);
+        setResult((current) => current?.attemptId === pending.attemptId ? { ...current, application, salonSyncStatus: 'saved' } : current);
+        setFailedSyncs((items) => items.filter((item) => item.application.id !== pending.application.id));
+        console.info('[checkin-timing]', { phase: 'salon-save', durationMs: Math.round(performance.now() - startedAt) });
+      } catch (syncError) {
+        console.error('[CheckinPage] Salon attendance sync failed', syncError);
+        setResult((current) => current?.attemptId === pending.attemptId ? { ...current, salonSyncStatus: 'failed' } : current);
+        setFailedSyncs((items) => [...items.filter((item) => item.application.id !== pending.application.id), { ...pending, salonSyncStatus: 'failed' }]);
+      }
+    });
+    syncQueueRef.current = task;
+    return task;
+  };
+
   const checkin = async (value) => {
     const raw = String(value || '').trim();
     if (!raw || checkinInFlightRef.current) return;
     checkinInFlightRef.current = true;
+    const attemptId = ++attemptRef.current;
+    const startedAt = performance.now();
     setBusy(true);
     setResult({ status: 'checking' });
     try {
@@ -247,26 +271,21 @@ export default function CheckinPage() {
           checkedInAt: now,
           checkedInBy: getCurrentUser()?.email || getCurrentUser()?.uid || 'join-confirmed',
         };
-        next = { ok: true, status: joinResult.duplicate ? 'already' : 'checked-in', application, imported: !existing, joinPass, joinResult, salonSyncStatus: 'pending' };
+        next = { ok: true, status: joinResult.duplicate ? 'already' : 'checked-in', application, imported: !existing, joinPass, joinResult, salonSyncStatus: 'pending', attemptId };
         setResult(next);
-        resumeScanAfter(2200);
+        resumeScanAfter(1200);
+        console.info('[checkin-timing]', { phase: 'admission-confirmed', durationMs: Math.round(performance.now() - startedAt), decodeMs: decodeDurationRef.current });
         if (next.status === 'checked-in') setCelebrationKey((key) => key + 1);
         void prepareAudio().then((audioContext) => playCheckinSound(audioContext, next.status)).catch(() => {});
         if (next.status === 'checked-in') setManualValue('');
-        try {
-          const saved = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, application));
-          setResult({ ...next, application: saved, salonSyncStatus: 'saved' });
-        } catch (syncError) {
-          console.error('[CheckinPage] Salon attendance sync failed', syncError);
-          setResult({ ...next, salonSyncStatus: 'failed' });
-        }
+        void syncSalonAttendance(next);
         return;
       } else {
         const user = getCurrentUser();
         next = await Promise.resolve(realtime.checkInApplication(sessionId, raw, user?.email || user?.uid || 'admin'));
       }
       setResult(next);
-      resumeScanAfter(2200);
+      resumeScanAfter(1200);
       if (next.status === 'checked-in') setCelebrationKey((value) => value + 1);
       void prepareAudio().then((audioContext) => playCheckinSound(audioContext, next.status)).catch(() => {});
       if (next.ok && next.status === 'checked-in') setManualValue('');
@@ -298,22 +317,12 @@ export default function CheckinPage() {
     void checkin(rawValue);
   };
 
-  const retrySalonSync = async () => {
-    if (checkinInFlightRef.current || result?.salonSyncStatus !== 'failed') return;
-    checkinInFlightRef.current = true;
-    setBusy(true);
-    const pending = { ...result, salonSyncStatus: 'pending' };
-    setResult(pending);
-    try {
-      const application = await Promise.resolve(realtime.upsertCheckinApplication(sessionId, pending.application));
-      setResult({ ...pending, application, salonSyncStatus: 'saved' });
-    } catch (syncError) {
-      console.error('[CheckinPage] Salon attendance sync retry failed', syncError);
-      setResult({ ...pending, salonSyncStatus: 'failed' });
-    } finally {
-      setBusy(false);
-      checkinInFlightRef.current = false;
-    }
+  const retrySalonSync = (failed) => {
+    if (failed.salonSyncStatus !== 'failed') return;
+    const pending = { ...failed, salonSyncStatus: 'pending' };
+    setFailedSyncs((items) => items.map((item) => item.application.id === failed.application.id ? pending : item));
+    setResult((current) => current?.attemptId === failed.attemptId ? { ...current, salonSyncStatus: 'pending' } : current);
+    void syncSalonAttendance(pending);
   };
 
   const startCamera = async (preferredFacing = cameraFacing) => {
@@ -324,11 +333,12 @@ export default function CheckinPage() {
       const generation = scanGenerationRef.current;
       setScannerState('starting');
       setScannerMessage(`${cameraFacingLabels[preferredFacing] || '카메라'}를 준비하고 있어요.`);
-      const videoConstraints = { facingMode: { ideal: preferredFacing } };
+      decodeDurationRef.current = null;
+      const videoConstraints = { facingMode: { ideal: preferredFacing }, width: { ideal: 960 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } };
       if (!('BarcodeDetector' in window)) {
-        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const { BrowserQRCodeReader } = await import('@zxing/browser');
         if (generation !== scanGenerationRef.current) return;
-        const reader = new BrowserMultiFormatReader();
+        const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 120, delayBetweenScanSuccess: 120 });
         scanActiveRef.current = true;
         const controls = await reader.decodeFromConstraints(
           { video: videoConstraints, audio: false },
@@ -365,7 +375,9 @@ export default function CheckinPage() {
         if (!scanActiveRef.current || generation !== scanGenerationRef.current || !videoRef.current) return;
         try {
           if (!scanFrozenRef.current) {
+            const decodeStartedAt = performance.now();
             const codes = await detectorRef.current.detect(videoRef.current);
+            decodeDurationRef.current = Math.round(performance.now() - decodeStartedAt);
             if (generation !== scanGenerationRef.current) return;
             acceptScan(codes[0]?.rawValue || '', codes[0]?.cornerPoints || []);
           }
@@ -416,7 +428,6 @@ export default function CheckinPage() {
 
   const copy = resultCopy(result);
   const parsed = parseCheckinPayload(manualValue);
-  const waitingForSalonSync = busy && !scanFrozen && result?.salonSyncStatus === 'pending';
 
   return <main className="checkin-shell" style={sessionThemeStyle(session)}>
     <section className="checkin-hero">
@@ -428,7 +439,7 @@ export default function CheckinPage() {
         <div className={`checkin-camera ${scannerState}${scanFrozen ? ` is-frozen phase-${result?.status || 'checking'}` : ''}`}>
           <video ref={videoRef} muted playsInline />
           <canvas ref={capturedFrameRef} className="checkin-captured-frame" aria-hidden="true" />
-          <div><strong>{scanFrozen ? copy.title : waitingForSalonSync ? '다음 입장 준비 중' : scannerState === 'scanning' ? '스캔 중' : result?.status ? copy.title : 'QR 스캐너'}</strong><span>{scanFrozen ? copy.body : waitingForSalonSync ? 'Salon 명단을 저장하고 있어요.' : scannerState === 'scanning' ? scannerMessage : result?.status ? copy.body : scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
+          <div><strong>{scanFrozen ? copy.title : scannerState === 'scanning' ? '스캔 중' : result?.status ? copy.title : 'QR 스캐너'}</strong><span>{scanFrozen ? copy.body : scannerState === 'scanning' ? scannerMessage : result?.status ? copy.body : scannerMessage || '카메라를 시작하거나 Join 개인 QR URL을 수동으로 입력하세요.'}</span></div>
         </div>
         <div className="checkin-actions"><button type="button" onClick={() => startCamera()} disabled={scannerState === 'starting' || scannerState === 'scanning'}>{scannerState === 'starting' ? '카메라 준비 중…' : `${cameraFacingLabels[cameraFacing]} 스캔 시작`}</button><button className="checkin-secondary-action" type="button" onClick={switchCamera} disabled={scannerState === 'starting' || busy}>{cameraFacing === 'environment' ? '전면으로 전환' : '후면으로 전환'}</button><button className="checkin-secondary-action" type="button" onClick={stopCamera} disabled={scannerState !== 'scanning'}>카메라 끄기</button><button className="checkin-sound-toggle" type="button" onClick={toggleSound}>{soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'}</button></div>
         <form className="checkin-manual" onSubmit={(event) => { event.preventDefault(); checkin(manualValue); }}>
@@ -442,10 +453,10 @@ export default function CheckinPage() {
         <span>{result?.status === 'checking' ? 'VERIFYING' : copy.tone === 'success' ? 'WELCOME' : copy.tone === 'already' ? 'ALREADY IN' : copy.tone === 'error' ? 'CHECK NEEDED' : 'READY'}</span>
         <h2>{copy.title}</h2>
         <p>{copy.body}</p>
-        {result?.salonSyncStatus === 'failed' ? <button type="button" onClick={retrySalonSync} disabled={busy}>Salon 명단 다시 저장</button> : null}
       </aside>
       <section className="checkin-recent">
         <header><h2>최근 입장</h2><span>{summary.waiting}명 대기</span></header>
+        {failedSyncs.length ? <div role="status"><p>Join 입장은 완료되었습니다. 아래 참가자의 Salon 명단을 다시 저장해 주세요.</p>{failedSyncs.map((item) => <button key={item.application.id} type="button" onClick={() => retrySalonSync(item)} disabled={item.salonSyncStatus === 'pending'}>{item.application.name} · {item.salonSyncStatus === 'pending' ? '저장 중…' : '명단 다시 저장'}</button>)}</div> : null}
         {recent.length ? <ol>{recent.map((item) => <li key={item.id}><strong>{item.name}</strong><span>{item.ticketType} · {item.checkedInAt ? formatDateTime(item.checkedInAt) : '방금'}</span></li>)}</ol> : <p>아직 입장 처리된 신청자가 없습니다.</p>}
       </section>
     </section>
