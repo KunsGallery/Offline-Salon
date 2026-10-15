@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SalonAvatar from '../participants/SalonAvatar';
 import { realtime } from '../../lib/realtime';
 import { prepareParticipantPhoto } from '../../lib/participantPhoto';
+import { preparedPearCase } from '../../lib/pearPrepared';
+import PreparedPearRemotePanel from './PreparedPearRemotePanel';
 
 const DETECTIVE_CINEMATIC_STEPS = {
   observing: ['사진 관찰', '먼저 이 사진의 단서를 살펴보겠습니다.', '색과 형태, 장면의 분위기를 읽고 있어요.'],
@@ -146,6 +148,13 @@ export function PearPlayParticipantView({ session, participants = [], participan
 
   if (receipt) return <main className="pear-participant-view"><EnvelopeScene preview={preview} status="accepted" /></main>;
 
+  const prepared = preparedPearCase(session);
+  if (stage.mode === 'pear-play' && stage.pearView === 'case' && prepared) {
+    if (stage.pearPhase === 'artwork-only') return <main className="pear-participant-view pear-reverse-mobile"><h1>이 작품은 어떤 사진에서 시작됐을까요?</h1><PairArtwork pairing={prepared.pearPairing} /><p>호스트 화면을 함께 보며 떠오르는 장면을 이야기해 보세요.</p></main>;
+    if (stage.pearPhase === 'connection') return <PearPlayResultView participant={prepared} pairing={prepared.pearPairing} isShared />;
+    return <main className="pear-participant-view pear-reverse-mobile"><h1>사진과 작품의 연결</h1><section className="pear-result-pair"><figure><img src={prepared.pearPairing.photoUrl} alt="원본 사진" /><figcaption>원본 사진</figcaption></figure><strong>×</strong><PairArtwork pairing={prepared.pearPairing} /></section></main>;
+  }
+
   if (hasSharedCase) {
     if (selectedPairing.status === 'ready' && ['found', 'revealed', 'connection'].includes(stage.pearPhase)) return <PearPlayResultView participant={selectedParticipant} pairing={selectedPairing} isShared={selectedParticipant.participantId !== participant?.participantId} />;
     return <SharedPearPlayView participant={selectedParticipant} pairing={selectedPairing} phase={stage.pearPhase || 'photo'} investigationStep={stage.pearInvestigationStep} investigationClue={stage.pearInvestigationClue} isMine={selectedParticipant.participantId === participant?.participantId} />;
@@ -235,6 +244,7 @@ function HostPairBoardView({ current, pairing, phase }) {
 }
 
 function HostCaseState({ current, pairing, phase, showArtwork, investigationStep, investigationClue }) {
+  if (phase === 'artwork-only') return <section className="pear-host-state pear-host-state-photo pear-reverse-artwork" aria-label="역추리 작품"><div className="pear-selected-photo"><img src={pairing.finalArtwork.imageUrl} alt="역추리 작품" /></div></section>;
   if (showArtwork) return <HostPairBoardView current={current} pairing={pairing} phase={phase} />;
   if (phase === 'investigating') return <HostInvestigationView current={current} pairing={pairing} investigationStep={investigationStep} investigationClue={investigationClue} />;
   if (phase === 'found') return <HostFoundView pairing={pairing} />;
@@ -293,21 +303,27 @@ export function PearPlayHostView({ session, participants = [], participantsLoadi
   const pinningPhoto = submitted[pinningIndex]?.pearPairing?.photoUrl;
   const view = session.stage?.pearView || 'case';
   const wallMode = view === 'wall' || view === 'board';
-  const current = submitted.find((participant) => participant.participantId === session.stage?.pearParticipantId) || submitted[0];
+  const current = session.stage?.pearPreparedCaseId ? preparedPearCase(session) : submitted.find((participant) => participant.participantId === session.stage?.pearParticipantId) || submitted[0];
   const pairing = current?.pearPairing;
   if (!current || !pairing) return <main className="pear-host pear-host-empty"><div className="pear-host-vignette" aria-hidden="true" /><EvidenceWall participants={submitted} pinnedIds={pinnedIds} pinningId={pinningId} /><BoardAssistant pinningId={pinningId} pinningSide={pinningSide} pinningPhoto={pinningPhoto} pinningSlot={pinningSlot} /><div className="pear-empty-copy"><span className="pear-case-label">THE RIENZI AGENCY · INTAKE</span><h1>다음 사건을<br />기다리고 있어요.</h1><p>참여자가 사진을 제출하면 조수가 사건 보드에 등록합니다.</p></div></main>;
   const phase = session.stage?.pearPhase || 'photo';
   const showArtwork = phase === 'revealed' || phase === 'connection';
-  const detectiveBoardMode = !wallMode && ['photo', 'investigating', 'found', 'revealed', 'connection'].includes(phase);
+  const detectiveBoardMode = !wallMode && ['photo', 'investigating', 'found', 'revealed', 'connection', 'artwork-only'].includes(phase);
   const sceneKey = wallMode ? 'wall' : `${phase}:${current.participantId}`;
-  return <main className={`pear-host ${wallMode ? 'pear-host-wall' : detectiveBoardMode ? 'pear-host-selected' : `pear-host-case phase-${phase}`}`}><div className="pear-host-vignette" aria-hidden="true" /><div className="pear-scene-transition" key={sceneKey} aria-hidden="true" /><header><div><span className="pear-case-label">THE RIENZI AGENCY · {wallMode ? 'EVIDENCE WALL' : phaseLabel(phase)}</span><h1>{wallMode ? 'EVIDENCE WALL' : `${current.nickname || '익명'}의 사건`}</h1><p>{wallMode ? '접수된 사진이 사건 보드에 고정되어 있습니다.' : '조수가 현장 사진을 사건 보드에 정리했습니다.'}</p></div><strong>{wallMode ? `${submitted.length} CASES` : `CASE ${String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}`}</strong></header><div className={`pear-evidence-wall-layer ${detectiveBoardMode ? 'is-hidden' : ''}`}><EvidenceWall participants={submitted} currentId={wallMode ? '' : current.participantId} pinnedIds={pinnedIds} pinningId={pinningId} /></div>{wallMode ? <BoardAssistant pinningId={pinningId} pinningSide={pinningSide} pinningPhoto={pinningPhoto} pinningSlot={pinningSlot} /> : null}{!wallMode ? <HostCaseState current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} investigationStep={session.stage?.pearInvestigationStep} investigationClue={session.stage?.pearInvestigationClue} /> : null}</main>;
+  const caseNumber = current.isPrepared ? `REVERSE CASE ${String((session.pearPreparedCases || []).findIndex((item) => item.id === current.id) + 1).padStart(2, '0')}` : `CASE ${String(submitted.findIndex((participant) => participant.participantId === current.participantId) + 1).padStart(2, '0')}`;
+  return <main className={`pear-host ${wallMode ? 'pear-host-wall' : detectiveBoardMode ? 'pear-host-selected' : `pear-host-case phase-${phase}`}`}>
+    <div className="pear-host-vignette" aria-hidden="true" /><div className="pear-scene-transition" key={sceneKey} aria-hidden="true" />
+    <header><div><span className="pear-case-label">THE RIENZI AGENCY · {wallMode ? 'EVIDENCE WALL' : phaseLabel(phase)}</span><h1>{wallMode ? 'EVIDENCE WALL' : current.isPrepared ? '역추리 사건' : `${current.nickname || '익명'}의 사건`}</h1><p>{wallMode ? '접수된 사진이 사건 보드에 고정되어 있습니다.' : '조수가 현장 사진을 사건 보드에 정리했습니다.'}</p></div><strong>{wallMode ? `${submitted.length} CASES` : caseNumber}</strong></header>
+    <div className={`pear-evidence-wall-layer ${detectiveBoardMode ? 'is-hidden' : ''}`}><EvidenceWall participants={submitted} currentId={wallMode ? '' : current.participantId} pinnedIds={pinnedIds} pinningId={pinningId} /></div>
+    {wallMode ? <BoardAssistant pinningId={pinningId} pinningSide={pinningSide} pinningPhoto={pinningPhoto} pinningSlot={pinningSlot} /> : <HostCaseState current={current} pairing={pairing} phase={phase} showArtwork={showArtwork} investigationStep={session.stage?.pearInvestigationStep} investigationClue={session.stage?.pearInvestigationClue} />}
+  </main>;
 }
 
 export function PearPlayRemotePanel({ session, participants = [], participantsLoading = false, participantsError = null, busy = false, run, onStartInvestigation }) {
   const submitted = useMemo(() => participants.filter((participant) => participant.pearPairing?.photoUrl), [participants]);
   const stage = session.stage || {};
-  const updateStage = (patch) => realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...stage, mode: 'pear-play', blackout: false, ...patch }, status: 'live' });
-  const current = submitted.find((participant) => participant.participantId === stage.pearParticipantId) || submitted[0];
+  const updateStage = (patch) => realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...stage, mode: 'pear-play', pearPreparedCaseId: null, blackout: false, ...patch }, status: 'live' });
+  const current = stage.pearPreparedCaseId ? null : submitted.find((participant) => participant.participantId === stage.pearParticipantId) || submitted[0];
   const currentReady = current?.pearPairing?.status === 'ready';
   const caseOnScreen = stage.mode === 'pear-play' && stage.pearView !== 'wall' && stage.pearView !== 'board' && stage.pearParticipantId === current?.participantId;
   const phase = caseOnScreen ? stage.pearPhase || 'photo' : 'photo';
@@ -319,6 +335,7 @@ export function PearPlayRemotePanel({ session, participants = [], participantsLo
   const currentStatus = !caseOnScreen ? '관객 화면에서 선택 전' : phase === 'investigating' ? '추리 진행 중' : phase === 'found' ? '작품 발견 · 공개 대기' : phase === 'revealed' ? '찾은 작품 공개 중' : phase === 'connection' ? '연결 이유 표시 중' : '현장 사진 공개 중';
 
   return <section className="remote-assets pear-remote-panel" aria-label="PEAR PLAY 진행">
+    <PreparedPearRemotePanel session={session} busy={busy} run={run} />
     <div className="pear-remote-heading"><div><h2>PEAR PLAY 진행</h2><span>{submitted.length}건 접수</span></div><button type="button" onClick={() => window.open(`${window.location.origin}/client/${encodeURIComponent(session.id)}`, '_blank', 'noopener,noreferrer')}>참가자 화면 보기</button></div>
     {current ? <div className="pear-current-case">
       <img className="pear-current-photo" src={current.pearPairing.photoUrl} alt={`${current.nickname || '익명'}의 접수 사진`} />

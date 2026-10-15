@@ -61,6 +61,7 @@ export function cloneSession(session) {
     stage: { ...(session.stage || {}) },
     enabledModules: [...(session.enabledModules || [])],
     exhibitionReferences: (session.exhibitionReferences || []).map((entry) => ({ ...entry })),
+    pearPreparedCases: (session.pearPreparedCases || []).map(cloneParticipant),
     checkinApplications: (session.checkinApplications || []).map((entry) => ({ ...entry })),
     artworks: (session.artworks || []).map(cloneAsset),
     artworkSecrets: Object.fromEntries(
@@ -238,6 +239,7 @@ export function normalizeSession(session) {
     platform: session.platform || 'offline-salon-core',
     enabledModules: normalizeSessionModules(session.enabledModules),
     exhibitionReferences: normalizeSessionExhibitionReferences(session.exhibitionReferences),
+    pearPreparedCases: (Array.isArray(session.pearPreparedCases) ? session.pearPreparedCases : []).map(cloneParticipant),
     checkinApplications: normalizeCheckinApplications(session.checkinApplications),
     status: session.status || 'draft',
     currentQuestionId: session.currentQuestionId || null,
@@ -268,6 +270,7 @@ export function normalizeSession(session) {
       view: session.stage?.view || null,
       participantId: session.stage?.participantId || null,
       pearParticipantId: session.stage?.pearParticipantId || null,
+      pearPreparedCaseId: session.stage?.pearPreparedCaseId || null,
       pearPhase: session.stage?.pearPhase || 'idle',
       pearInvestigationStep: session.stage?.pearInvestigationStep || 'idle',
       pearInvestigationClue: session.stage?.pearInvestigationClue || '',

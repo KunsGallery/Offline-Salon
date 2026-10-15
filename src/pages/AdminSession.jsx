@@ -9,6 +9,7 @@ import SessionEditor from '../components/admin/SessionEditor';
 import SessionMediaStudio from '../components/admin/SessionMediaStudio';
 import AdminLiveConsole from '../components/admin/AdminLiveConsole';
 import CheckinManager from '../components/admin/CheckinManager';
+import PreparedPearCases from '../components/admin/PreparedPearCases';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
 import { formatDateTime } from '../lib/format';
 import { hasSessionModule } from '../lib/sessionModules';
@@ -166,6 +167,7 @@ export default function AdminSession() {
         <button className={section === 'engagement' ? 'active' : ''} onClick={() => setSection('engagement')}><span>04</span>참여 현황</button>
         <button className={section === 'access' ? 'active' : ''} onClick={() => setSection('access')}><span>05</span>접속·QR</button>
       </nav>
+      {section === 'setup' && hasSessionModule(session, 'pear-play') ? <PreparedPearCases session={session} /> : null}
 
       {section === 'setup' ? <section className="admin-workspace stack gap-lg"><div className="setup-summary"><div><span>{hasSessionModule(session, 'exhibition-grape') ? '참고 전시' : '갤러리 이미지'}</span><strong>{hasSessionModule(session, 'exhibition-grape') ? resolveExhibitionReferences(session).length : session.artworks?.length || 0}</strong></div><div><span>PDF</span><strong>{session.decks?.length || 0}</strong></div><div><span>참여 활동</span><strong>{questions.filter((item) => !item.internal).length}</strong></div><div><span>마지막 저장</span><strong>{formatDateTime(session.updatedAt)}</strong></div></div><SessionEditor session={session} /><SessionMediaStudio session={session} questions={questions} /></section> : null}
 

@@ -48,6 +48,114 @@ function pearSession() {
   };
 }
 
+function preparedSession() {
+  const state = pearSession();
+  const session = state.sessions.session_pear_remote;
+  session.pearPreparedCases = [{ id: 'prepared_one', title: '관리자 사진', pearPairing: { ...session.participants.guest_two.pearPairing } }];
+  return state;
+}
+
+test('prepared reverse case shows only artwork until the host reveals the source', async ({ page, context }) => {
+  await page.addInitScript(({ key, state }) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(state));
+    localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
+    localStorage.setItem('offline-salon:nickname:session_pear_remote', '호야');
+  }, { key: STORAGE_KEY, state: preparedSession() });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/remote/session_pear_remote');
+  const host = await context.newPage();
+  await host.setViewportSize({ width: 1440, height: 900 });
+  await host.goto('/host/session_pear_remote');
+  const client = await context.newPage();
+  await client.setViewportSize({ width: 390, height: 844 });
+  await client.goto('/client/session_pear_remote');
+  let apiCalls = 0;
+  await context.route('**/.netlify/functions/pear-play', (route) => { apiCalls += 1; return route.fulfill({ status: 500 }); });
+  await page.getByRole('button', { name: /사건 1 · 관리자 사진/ }).click();
+  await expect(host.locator('.pear-reverse-artwork img')).toHaveAttribute('src', '/pear-play/office-board-original.webp');
+  await expect(host.locator('.pear-board-pair')).toHaveCount(0);
+  await expect(client.locator('.pear-reverse-mobile')).toContainText('이 작품은 어떤 사진에서 시작됐을까요?');
+  await expect(client.locator('img[src="/pear-play/envelope-open-original.webp"]')).toHaveCount(0);
+  await expect(client.locator('.pear-connection')).toHaveCount(0);
+  await host.screenshot({ path: 'test-results/prepared-host-artwork.png' });
+  await page.screenshot({ path: 'test-results/prepared-remote-mobile.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.getByRole('button', { name: '원본 사진 공개', exact: true }).click();
+  await expect(host.locator('.pear-board-pair img')).toHaveCount(2);
+  await expect(client.locator('.pear-result-pair img')).toHaveCount(2);
+  await expect(host.locator('.pear-board-map')).toHaveCount(0);
+  await expect(client.locator('.pear-connection')).toHaveCount(0);
+  await page.getByRole('button', { name: '연결 이유 보기', exact: true }).click();
+  await expect(host.locator('.pear-board-map')).toContainText('일상의 편지와 작품의 기록');
+  await expect(client.locator('.pear-connection')).toContainText('일상의 편지와 작품의 기록');
+  await page.getByRole('button', { name: '작품만 다시 보기' }).click();
+  await expect(host.locator('.pear-reverse-artwork')).toBeVisible();
+  await expect(client.locator('.pear-connection')).toHaveCount(0);
+  await page.getByRole('button', { name: /호야 사진 접수 완료/ }).click();
+  await expect(host.locator('.pear-reverse-artwork')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '탐정 P의 추리 시작' })).toBeVisible();
+  expect(apiCalls).toBe(0);
+  await host.close(); await client.close();
+});
+
+test('prepared cases work with no participant uploads and survive remote reload', async ({ page, context }) => {
+  const state = preparedSession();
+  state.sessions.session_pear_remote.participants = {};
+  state.sessions.session_pear_remote.pearPreparedCases.push({ id: 'unfinished', title: '조사 대기 사진', pearPairing: { photoUrl: PHOTO, status: 'error' } });
+  await page.addInitScript(({ key, state }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(state)); }, { key: STORAGE_KEY, state });
+  await page.goto('/remote/session_pear_remote');
+  await expect(page.getByRole('button', { name: /조사 대기 사진/ })).toBeDisabled();
+  await page.getByRole('button', { name: /사건 1 · 관리자 사진/ }).click();
+  await page.reload();
+  await expect(page.getByRole('button', { name: '원본 사진 공개', exact: true })).toBeVisible();
+  const host = await context.newPage();
+  await host.goto('/host/session_pear_remote');
+  await expect(host.locator('.pear-reverse-artwork img')).toBeVisible();
+  await host.close();
+});
+
+test('admin uploads and retries a prepared investigation without changing the live screen', async ({ page }) => {
+  await page.addInitScript(({ key, state }) => localStorage.setItem(key, JSON.stringify(state)), { key: STORAGE_KEY, state: pearSession() });
+  await page.route('**/src/lib/auth.js', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('return auth?.currentUser || null;', 'return { getIdToken: async () => "test-admin-token" };');
+    await route.fulfill({ response, body });
+  });
+  let calls = 0;
+  await page.route('**/.netlify/functions/pear-play', (route) => {
+    calls += 1;
+    if (calls === 1) return route.fulfill({ status: 502, json: { ok: false, error: '테스트 조사 실패' } });
+    return route.fulfill({ json: { ok: true, status: 'completed', pairing: pearSession().sessions.session_pear_remote.participants.guest_two.pearPairing } });
+  });
+  await page.goto('/admin/session_pear_remote');
+  const stageBefore = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_pear_remote.stage, STORAGE_KEY);
+  await page.getByLabel('사전 조사 사진', { exact: true }).setInputFiles('public/pear-play/envelope-open-original.webp');
+  await expect(page.locator('.prepared-pear-item')).toContainText('테스트 조사 실패');
+  await page.locator('.prepared-pear-item').getByRole('button', { name: '작품 조사', exact: true }).click();
+  await expect(page.locator('.prepared-pear-item')).toContainText('조사 완료');
+  await expect(page.locator('.prepared-pear-item img')).toHaveCount(2);
+  await page.screenshot({ path: 'test-results/prepared-admin-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.locator('.prepared-pear-admin').screenshot({ path: 'test-results/prepared-admin-mobile.png' });
+  const stageAfter = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_pear_remote.stage, STORAGE_KEY);
+  expect(stageAfter).toEqual(stageBefore);
+  expect(calls).toBe(2);
+});
+
+test('deleting the active prepared case resets the stage to the participant board', async ({ page }) => {
+  const state = preparedSession();
+  state.sessions.session_pear_remote.stage = { mode: 'pear-play', pearView: 'case', pearPreparedCaseId: 'prepared_one', pearPhase: 'artwork-only' };
+  await page.addInitScript(({ key, state }) => localStorage.setItem(key, JSON.stringify(state)), { key: STORAGE_KEY, state });
+  await page.goto('/admin/session_pear_remote');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('.prepared-pear-item').getByRole('button', { name: '삭제', exact: true }).click();
+  await expect(page.locator('.prepared-pear-item')).toHaveCount(0);
+  const stage = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_pear_remote.stage, STORAGE_KEY);
+  expect(stage.pearPreparedCaseId).toBeNull();
+  expect(stage.pearView).toBe('wall');
+});
+
 test('mobile PEAR remote keeps the next action visible and switches cases without duplicate controls', async ({ page }) => {
   await page.addInitScript(({ key, state }) => localStorage.setItem(key, JSON.stringify(state)), { key: STORAGE_KEY, state: pearSession() });
   await page.setViewportSize({ width: 320, height: 700 });

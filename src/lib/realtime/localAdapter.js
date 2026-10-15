@@ -323,6 +323,30 @@ const localAdapter = {
     return session;
   },
 
+  upsertPreparedPearCase(sessionId, input) {
+    const session = ensureSession(sessionId);
+    const id = input.id || createId('pear_case');
+    const items = session.pearPreparedCases || [];
+    const previous = items.find((item) => item.id === id);
+    if (!previous && items.length >= 24) throw new Error('사전 조사 사진은 세션당 24장까지 등록할 수 있습니다.');
+    const now = nowIso();
+    const item = { ...previous, ...input, id, createdAt: previous?.createdAt || now, updatedAt: now };
+    session.pearPreparedCases = previous ? items.map((entry) => entry.id === id ? item : entry) : [...items, item];
+    session.updatedAt = now;
+    normalizeSessionState(session);
+    broadcast(sessionId);
+    return item;
+  },
+
+  deletePreparedPearCase(sessionId, id) {
+    const session = ensureSession(sessionId);
+    session.pearPreparedCases = (session.pearPreparedCases || []).filter((item) => item.id !== id);
+    if (session.stage?.pearPreparedCaseId === id) session.stage = { ...session.stage, pearPreparedCaseId: null, pearParticipantId: null, pearView: 'wall', pearPhase: 'photo' };
+    session.updatedAt = nowIso();
+    normalizeSessionState(session);
+    broadcast(sessionId);
+  },
+
   upsertCheckinApplication(sessionId, input = {}) {
     const session = ensureSession(sessionId);
     const now = nowIso();

@@ -75,6 +75,7 @@ function fromSessionDoc(id, data) {
       platform: data.platform || 'offline-salon-core',
       enabledModules: data.enabledModules || [],
       exhibitionReferences: data.exhibitionReferences || [],
+      pearPreparedCases: data.pearPreparedCases || [],
       checkinApplications: (data.checkinApplications || []).map((item) => ({
         ...item,
         checkedInAt: item.checkedInAt ? toIso(item.checkedInAt) : null,
@@ -340,6 +341,38 @@ const firestoreAdapter = {
     await updateDoc(sessionDocRef(sessionId), {
       ...patch,
       updatedAt: serverTimestamp(),
+    });
+  },
+
+  async upsertPreparedPearCase(sessionId, input) {
+    requireAdminWrite();
+    const id = input.id || createId('pear_case');
+    return runTransaction(ensureDb(), async (transaction) => {
+      const ref = sessionDocRef(sessionId);
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
+      const items = snap.data().pearPreparedCases || [];
+      const previous = items.find((item) => item.id === id);
+      if (!previous && items.length >= 24) throw new Error('사전 조사 사진은 세션당 24장까지 등록할 수 있습니다.');
+      const now = new Date().toISOString();
+      const item = { ...previous, ...input, id, createdAt: previous?.createdAt || now, updatedAt: now };
+      transaction.update(ref, { pearPreparedCases: previous ? items.map((entry) => entry.id === id ? item : entry) : [...items, item], updatedAt: serverTimestamp() });
+      return item;
+    });
+  },
+
+  async deletePreparedPearCase(sessionId, id) {
+    requireAdminWrite();
+    return runTransaction(ensureDb(), async (transaction) => {
+      const ref = sessionDocRef(sessionId);
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
+      const data = snap.data();
+      transaction.update(ref, {
+        pearPreparedCases: (data.pearPreparedCases || []).filter((item) => item.id !== id),
+        ...(data.stage?.pearPreparedCaseId === id ? { stage: { ...data.stage, pearPreparedCaseId: null, pearParticipantId: null, pearView: 'wall', pearPhase: 'photo' } } : {}),
+        updatedAt: serverTimestamp(),
+      });
     });
   },
 

@@ -12,6 +12,7 @@ import { useParticipants } from '../hooks/useParticipants';
 import { ExhibitionGrapeRemotePanel } from '../components/activities/ExhibitionGrapeViews';
 import { PearPlayRemotePanel } from '../components/activities/PearPlayViews';
 import { requestPearPairing } from '../lib/pearPlay';
+import { preparedPearCase } from '../lib/pearPrepared';
 import { hasSessionModule } from '../lib/sessionModules';
 
 export default function RemoteControl() {
@@ -68,7 +69,7 @@ export default function RemoteControl() {
   const nearbyPages = deck ? Array.from({ length: Math.min(5, deck.pageCount) }, (_, index) => Math.min(deck.pageCount, Math.max(1, page - 2) + index)).filter((value, index, list) => list.indexOf(value) === index) : [];
   const pearEnabled = hasSessionModule(session, 'pear-play');
   const pearSubmitted = participants.filter((participant) => participant.pearPairing?.photoUrl);
-  const pearCurrent = pearSubmitted.find((participant) => participant.participantId === stage.pearParticipantId) || pearSubmitted[0];
+  const pearCurrent = stage.pearPreparedCaseId ? preparedPearCase(session) : pearSubmitted.find((participant) => participant.participantId === stage.pearParticipantId) || pearSubmitted[0];
   const hasAccuratePreview = Boolean(activeDeck || ((stage.mode === 'image' || stage.mode === 'artwork') && artwork));
   const connected = online && !sessionError && !participantsError;
   const participantAccessDenied = participantsError && (participantsError.code === 'permission-denied' || /permission|insufficient/i.test(participantsError.message));
@@ -95,7 +96,7 @@ export default function RemoteControl() {
   const startPearInvestigation = async (participant) => {
     const selectedPairing = participant?.pearPairing;
     if (!participant || !selectedPairing?.photoUrl) throw new Error('먼저 조사할 참가자 사진을 선택해 주세요.');
-    const investigatingStage = { ...stage, mode: 'pear-play', pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'observing', blackout: false };
+    const investigatingStage = { ...stage, mode: 'pear-play', pearPreparedCaseId: null, pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'observing', blackout: false };
     await realtime.updateSession(session.id, { currentQuestionId: null, stage: investigatingStage, status: 'live' });
     let currentStep = 'observing';
     let stepStartedAt = Date.now();
@@ -186,7 +187,7 @@ export default function RemoteControl() {
       if (!stage.blackout && !window.confirm('관객 화면을 가릴까요?')) return;
       run(() => setView({ blackout: !stage.blackout }), stage.blackout ? '관객 화면을 다시 표시했습니다.' : '관객 화면을 가렸습니다.');
     }}>{stage.blackout ? '다시 표시' : '화면 가리기'}</button></div>
-      {stage.mode === 'pear-play' && pearCurrent ? <div className="remote-onair-person"><img src={pearCurrent.pearPairing.photoUrl} alt="현재 사건 사진" /><span>{stage.pearView === 'wall' ? '전체 사진 보드 표시 중' : stage.pearPhase === 'investigating' ? '탐정 P가 추리 중' : stage.pearPhase === 'found' ? '작품 발견 · 공개 대기' : stage.pearPhase === 'revealed' ? '작품 공개 중' : stage.pearPhase === 'connection' ? '연결 이유 표시 중' : '현장 사진 표시 중'}</span></div> : null}
+      {stage.mode === 'pear-play' && pearCurrent ? <div className="remote-onair-person"><img src={stage.pearPhase === 'artwork-only' ? pearCurrent.pearPairing.finalArtwork?.imageUrl : pearCurrent.pearPairing.photoUrl} alt="현재 공개 이미지" /><span>{stage.pearView === 'wall' ? '전체 사진 보드 표시 중' : stage.pearPhase === 'artwork-only' ? '역추리 · 작품만 공개 중' : stage.pearPhase === 'investigating' ? '탐정 P가 추리 중' : stage.pearPhase === 'found' ? '작품 발견 · 공개 대기' : stage.pearPhase === 'revealed' ? '작품 공개 중' : stage.pearPhase === 'connection' ? '연결 이유 표시 중' : '현장 사진 표시 중'}</span></div> : null}
       {hasAccuratePreview || stage.blackout ? <div className={`remote-screen-preview ${stage.blackout ? 'blackout' : ''}`}>{stage.blackout ? <strong>화면 가림</strong> : stage.mode === 'pdf' ? <PdfPageCanvas url={deck.fileUrl} pageNumber={page} fitMode={stage.fitMode} zoom={stage.zoom} compact /> : <img src={artwork.imageUrl} alt="현재 표시 중인 작품" />}</div> : null}
       {stage.mode === 'gallery' ? <div className="remote-gallery-controls" aria-label="결과 갤러리 화면 이동"><button disabled={busy || page <= 1} onClick={() => run(() => setGalleryPosition(1))}>맨 위</button><button disabled={busy || page <= 1} onClick={() => run(() => setGalleryPosition(page - 1))}>↑ 위로</button><button disabled={busy || page >= galleryScrollSteps} onClick={() => run(() => setGalleryPosition(page + 1))}>아래로 ↓</button></div> : null}
       {stage.mode === 'artwork' && artwork ? <div className="remote-live-metric"><strong>{artwork.title || '작품'}</strong><b>{responses.length}<small> TITLES</small></b></div> : null}

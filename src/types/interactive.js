@@ -46,6 +46,7 @@
  * @property {string} joinSalonId Join salonEvents document ID
  * @property {'offline-salon-core'} platform
  * @property {Array<'exhibition-grape'|'pear-play'>} enabledModules
+ * @property {Array<{id: string, title: string, pearPairing: Object, createdAt: string, updatedAt: string}>} pearPreparedCases Administrator-prepared reverse cases; separate from participants
  * @property {Array<{id: string, title: string, venue: string, region: string, startDate: string, endDate: string, artistOrigin: 'domestic'|'international'|'mixed', categoryTags: string[], createdAt: string, updatedAt: string}>} exhibitionReferences
  * @property {Array<{id: string, name: string, email: string, phoneLast4: string, ticketType: string, status: 'approved'|'pending'|'cancelled', checkinToken: string, source?: 'manual'|'join', joinTokenHash?: string, joinShortCode?: string, joinSalonTitle?: string, joinEventDateTime?: string, joinVenueName?: string, joinParticipantId?: string, joinCheckinStatus?: string, joinNotificationStatus?: string, joinNotificationError?: string, checkedIn: boolean, checkedInAt: string|null, checkedInBy: string|null, createdAt: string, updatedAt: string}>} checkinApplications
  * @property {SessionStatus} status
