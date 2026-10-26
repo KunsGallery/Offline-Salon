@@ -19,6 +19,7 @@ const KID = 'test-key';
 const SITE = 'https://salon.example.com';
 
 let privateKey;
+let openAiStub = () => new Response('{}', { status: 500 });
 const realFetch = globalThis.fetch;
 
 before(async () => {
@@ -32,6 +33,7 @@ before(async () => {
       if (String(url).includes('securetoken@system.gserviceaccount.com')) {
         return new Response(JSON.stringify({ [KID]: certificate }), { headers: { 'cache-control': 'max-age=3600' } });
       }
+      if (String(url).startsWith('https://api.openai.com/')) return openAiStub(url, init);
       return realFetch(url, init);
     };
   } finally {
@@ -137,5 +139,52 @@ describe('pear-play', () => {
       assert.equal(response.status, 400, photoUrl);
       assert.equal((await response.json()).code, 'INVALID_PHOTO_URL', photoUrl);
     }
+  });
+});
+
+describe('pear-play narration', () => {
+  const photoUrl = 'https://media.example.com/salon/sessions/s1/pear/a.jpg';
+
+  test('poll returns the real search queries the model ran', async () => {
+    openAiStub = () => Response.json({
+      status: 'in_progress',
+      output: [
+        { type: 'web_search_call', status: 'completed', action: { type: 'search', query: '비 오는 창가 그림' } },
+        { type: 'web_search_call', status: 'in_progress', action: { type: 'search', query: '비 오는 창가 그림' } },
+        { type: 'web_search_call', status: 'in_progress', action: { type: 'search', queries: ['Edward Hopper Automat'] } },
+      ],
+    });
+    const response = await pearPlay(post(await bearer(adminClaims), { action: 'poll', responseId: 'resp_1', photoUrl }));
+    const body = await response.json();
+    assert.equal(body.investigationStep, 'searching');
+    assert.deepEqual(body.searchQueries, ['비 오는 창가 그림', 'Edward Hopper Automat']);
+  });
+
+  test('observe returns at most five short notes with clamped clue positions', async () => {
+    let sent;
+    openAiStub = async (url, init) => {
+      sent = JSON.parse(init.body);
+      return Response.json({ output_text: JSON.stringify({ notes: [
+        { text: '노란 우산이 먼저 눈에 들어오네요.', clue: '노란 우산', x: 140, y: -3 },
+        { text: '', clue: '빈 줄' },
+        { text: '이 사진을 한 단어로 하면… 기다림이에요.', clue: '기다림', x: 50, y: 50 },
+      ] }) });
+    };
+    const response = await pearPlay(post(await bearer(adminClaims), { action: 'observe', photoUrl }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(sent.input[0].content[1].detail, 'low');
+    assert.equal(sent.tools, undefined);
+    assert.deepEqual(body.notes, [
+      { text: '노란 우산이 먼저 눈에 들어오네요.', clue: '노란 우산', x: 95, y: 5 },
+      { text: '이 사진을 한 단어로 하면… 기다림이에요.', clue: '기다림', x: 50, y: 50 },
+    ]);
+  });
+
+  test('observe is admin-only and limited to project photos', async () => {
+    const anonymous = await pearPlay(post(await bearer({ firebase: { sign_in_provider: 'anonymous' } }), { action: 'observe', photoUrl }));
+    assert.equal(anonymous.status, 403);
+    const outside = await pearPlay(post(await bearer(adminClaims), { action: 'observe', photoUrl: 'https://evil.example.com/a.jpg' }));
+    assert.equal(outside.status, 400);
   });
 });

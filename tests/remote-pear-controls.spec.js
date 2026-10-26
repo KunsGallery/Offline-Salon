@@ -48,6 +48,24 @@ function pearSession() {
   };
 }
 
+// Waits for the moment the paw presses the pin, then measures how far the held photo is
+// from the card it is pinning (card centre-top vs photo centre-top, in px).
+function measureReachAtPin() {
+  return new Promise((resolve) => {
+    const measure = () => {
+      const assistant = document.querySelector('.pear-board-assistant');
+      if (assistant?.dataset.beat !== 'pin') return false;
+      const card = document.querySelector('.pear-evidence-note.is-pinning').getBoundingClientRect();
+      const held = document.querySelector('.pear-board-assistant-held-photo').getBoundingClientRect();
+      resolve(Math.hypot(card.left + card.width / 2 - (held.left + held.width / 2), card.top - held.top));
+      return true;
+    };
+    if (measure()) return;
+    const observer = new MutationObserver(() => { if (measure()) observer.disconnect(); });
+    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-beat'] });
+  });
+}
+
 function preparedSession() {
   const state = pearSession();
   const session = state.sessions.session_pear_remote;
@@ -317,24 +335,13 @@ test('new evidence is pinned by the assistant once and remains on the wall after
     localStorage.setItem(key, JSON.stringify(state));
   }, { key: STORAGE_KEY, photo: PHOTO });
   await expect(page.locator('.pear-board-assistant.is-pinning.is-left')).toBeVisible();
-  await expect(page.locator('.pear-board-assistant-held-photo')).toBeVisible();
   await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(1);
-  await page.waitForTimeout(650);
-  const leftReach = await page.evaluate(() => {
-    const card = document.querySelector('.pear-evidence-note.is-pinning').getBoundingClientRect();
-    const held = document.querySelector('.pear-board-assistant-held-photo').getBoundingClientRect();
-    return Math.hypot(card.left + card.width / 2 - (held.left + held.width / 2), card.top - held.top);
-  });
+  const leftReach = await page.evaluate(measureReachAtPin);
   expect(leftReach).toBeLessThan(70);
   await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(3);
   await expect(page.locator('.pear-board-assistant.is-pinning.is-right')).toBeVisible();
   await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(1);
-  await page.waitForTimeout(650);
-  const rightReach = await page.evaluate(() => {
-    const card = document.querySelector('.pear-evidence-note.is-pinning').getBoundingClientRect();
-    const held = document.querySelector('.pear-board-assistant-held-photo').getBoundingClientRect();
-    return Math.hypot(card.left + card.width / 2 - (held.left + held.width / 2), card.top - held.top);
-  });
+  const rightReach = await page.evaluate(measureReachAtPin);
   expect(rightReach).toBeLessThan(70);
   await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(4);
   await expect(page.locator('.pear-board-assistant:not(.is-pinning)')).toBeVisible();
@@ -347,4 +354,27 @@ test('new evidence is pinned by the assistant once and remains on the wall after
   await expect(page.locator('.pear-evidence-note.is-pinned')).toHaveCount(4);
   await expect(page.locator('.pear-evidence-note.is-pinning')).toHaveCount(0);
   await writer.close();
+});
+
+test('host narrates the photo with typed captions, a lens and clue slips, then real searches', async ({ page }) => {
+  const state = pearSession();
+  state.sessions.session_pear_remote.stage = {
+    mode: 'pear-play', pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'searching', pearParticipantId: 'guest_one',
+    pearInvestigationNotes: [
+      { text: '노란 우산이 먼저 눈에 들어오네요.', clue: '노란 우산', x: 70, y: 62 },
+      { text: '식은 커피 한 잔이 남아 있어요.', clue: '식은 커피', x: 30, y: 60 },
+    ],
+    pearInvestigationQueries: ['혼자 커피 마시는 여인 그림'],
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), { key: STORAGE_KEY, value: state });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/host/session_pear_remote');
+  const subtitles = page.locator('.detective-subtitles');
+  await expect(subtitles.locator('[aria-label="흠… 호야님의 사건 사진이군요."]')).toBeVisible();
+  await expect(subtitles.locator('[aria-label="노란 우산이 먼저 눈에 들어오네요."]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.detective-lens')).toBeVisible();
+  await expect(page.locator('.detective-clue', { hasText: '노란 우산' })).toBeVisible();
+  await expect(subtitles.locator('[aria-label="검색 · 혼자 커피 마시는 여인 그림"]')).toBeVisible({ timeout: 15000 });
+  await expect(subtitles).toContainText('실제 검색어');
+  await expect(page.locator('.detective-clue')).toHaveCount(2);
 });

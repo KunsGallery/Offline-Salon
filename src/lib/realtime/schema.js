@@ -274,6 +274,12 @@ export function normalizeSession(session) {
       pearPhase: session.stage?.pearPhase || 'idle',
       pearInvestigationStep: session.stage?.pearInvestigationStep || 'idle',
       pearInvestigationClue: session.stage?.pearInvestigationClue || '',
+      pearInvestigationNotes: (Array.isArray(session.stage?.pearInvestigationNotes) ? session.stage.pearInvestigationNotes : [])
+        .slice(0, 5)
+        .map((note) => ({ text: String(note?.text || ''), clue: String(note?.clue || ''), x: Number(note?.x ?? 50), y: Number(note?.y ?? 50) }))
+        .filter((note) => note.text),
+      pearInvestigationQueries: (Array.isArray(session.stage?.pearInvestigationQueries) ? session.stage.pearInvestigationQueries : []).slice(0, 6).map(String),
+      pearInvestigationStartedAt: session.stage?.pearInvestigationStartedAt || null,
       pearView: session.stage?.pearView || 'case',
       deckId: session.stage?.deckId || null,
       page: Math.max(1, Number(session.stage?.page || 1)),

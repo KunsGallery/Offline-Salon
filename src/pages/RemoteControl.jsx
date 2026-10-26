@@ -11,7 +11,7 @@ import { PdfPageCanvas, PdfZoomSelect } from '../components/media/LiveMediaViews
 import { useParticipants } from '../hooks/useParticipants';
 import { ExhibitionGrapeRemotePanel } from '../components/activities/ExhibitionGrapeViews';
 import { PearPlayRemotePanel } from '../components/activities/PearPlayViews';
-import { requestPearPairing } from '../lib/pearPlay';
+import { requestPearObservation, requestPearPairing } from '../lib/pearPlay';
 import { preparedPearCase } from '../lib/pearPrepared';
 import { hasSessionModule } from '../lib/sessionModules';
 
@@ -96,8 +96,27 @@ export default function RemoteControl() {
   const startPearInvestigation = async (participant) => {
     const selectedPairing = participant?.pearPairing;
     if (!participant || !selectedPairing?.photoUrl) throw new Error('먼저 조사할 참가자 사진을 선택해 주세요.');
-    const investigatingStage = { ...stage, mode: 'pear-play', pearPreparedCaseId: null, pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating', pearInvestigationStep: 'observing', blackout: false };
+    const investigatingStage = {
+      ...stage, mode: 'pear-play', pearPreparedCaseId: null, pearParticipantId: participant.participantId, pearView: 'case', pearPhase: 'investigating',
+      pearInvestigationStep: 'observing', pearInvestigationClue: '', pearInvestigationNotes: [], pearInvestigationQueries: [], pearInvestigationStartedAt: new Date().toISOString(), blackout: false,
+    };
     await realtime.updateSession(session.id, { currentQuestionId: null, stage: investigatingStage, status: 'live' });
+    // Observations, search queries and the step arrive independently; writes go out one at a
+    // time so a slower write never overwrites newer narration.
+    const live = { pearInvestigationStep: 'observing', pearInvestigationNotes: [], pearInvestigationQueries: [], pearInvestigationClue: '' };
+    let writes = Promise.resolve();
+    let finished = false;
+    const startedAt = Date.now();
+    const pushLive = (patch) => {
+      if (finished) return writes;
+      Object.assign(live, patch);
+      const snapshot = { ...live };
+      writes = writes.then(() => realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, ...snapshot }, status: 'live' })).catch(() => {});
+      return writes;
+    };
+    requestPearObservation({ photoUrl: selectedPairing.photoUrl }).then((notes) => {
+      if (notes.length) pushLive({ pearInvestigationNotes: notes, pearInvestigationClue: notes.map((note) => note.clue).filter(Boolean).slice(0, 2).join(' · ') });
+    });
     let currentStep = 'observing';
     let stepStartedAt = Date.now();
     try {
@@ -105,26 +124,28 @@ export default function RemoteControl() {
         sessionId,
         participantId: participant.participantId,
         photoUrl: selectedPairing.photoUrl,
-        onProgress: async ({ phase, pairing: progressPairing }) => {
-          const pearInvestigationStep = phase;
-          if (pearInvestigationStep === currentStep) return;
-          const remaining = 1800 - (Date.now() - stepStartedAt);
-          if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
-          currentStep = pearInvestigationStep;
-          const pearInvestigationClue = progressPairing ? [
-            progressPairing.analysis?.objects?.[0],
-            progressPairing.analysis?.colors?.[0],
-          ].filter(Boolean).join(' · ') : '';
-          await realtime.updateSession(session.id, {
-            currentQuestionId: null,
-            stage: { ...investigatingStage, pearInvestigationStep, pearInvestigationClue },
-            status: 'live',
-          });
-          stepStartedAt = Date.now();
+        onProgress: async ({ phase, pairing: progressPairing, queries = [] }) => {
+          const patch = {};
+          const knownQueries = live.pearInvestigationQueries;
+          if (queries.some((query) => !knownQueries.includes(query))) patch.pearInvestigationQueries = [...new Set([...knownQueries, ...queries])].slice(0, 6);
+          if (phase !== currentStep) {
+            const remaining = 1800 - (Date.now() - stepStartedAt);
+            if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+            currentStep = phase;
+            stepStartedAt = Date.now();
+            patch.pearInvestigationStep = phase;
+            if (!live.pearInvestigationClue && progressPairing) {
+              patch.pearInvestigationClue = [progressPairing.analysis?.objects?.[0], progressPairing.analysis?.colors?.[0]].filter(Boolean).join(' · ');
+            }
+          }
+          if (Object.keys(patch).length) await pushLive(patch);
         },
       });
-      const remaining = 1800 - (Date.now() - stepStartedAt);
+      // Leave the room at least a few observation lines before the answer replaces them.
+      const remaining = Math.max(1800 - (Date.now() - stepStartedAt), 12000 - (Date.now() - startedAt));
       if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+      finished = true;
+      await writes;
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: {
@@ -133,12 +154,14 @@ export default function RemoteControl() {
           photoPath: selectedPairing.photoPath || null,
         },
       }, { admin: true });
-      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'found', pearInvestigationStep: 'found' }, status: 'live' });
+      await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, ...live, pearPhase: 'found', pearInvestigationStep: 'found' }, status: 'live' });
     } catch (reason) {
+      finished = true;
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: { ...selectedPairing, status: 'error', error: reason?.message || '추리에 실패했습니다.', updatedAt: new Date().toISOString() },
       }, { admin: true });
+      await writes;
       await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'photo', pearInvestigationStep: 'idle' }, status: 'live' });
       throw reason;
     }

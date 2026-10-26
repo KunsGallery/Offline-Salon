@@ -94,6 +94,39 @@ function failedOpenAiResponse(data) {
   return data?.error?.message || data?.incomplete_details?.reason || 'PEAR PLAY AI 요청에 실패했습니다.';
 }
 
+// Real web search queries the model ran so far; the host shows them as the detective's case log.
+function searchQueries(data) {
+  const queries = (data?.output || [])
+    .filter((item) => item?.type === 'web_search_call')
+    .flatMap((item) => [item.action?.query, ...(Array.isArray(item.action?.queries) ? item.action.queries : [])])
+    .map((query) => String(query || '').trim().slice(0, 80))
+    .filter(Boolean);
+  return [...new Set(queries)].slice(0, 6);
+}
+
+function clampPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(95, Math.max(5, Math.round(number))) : 50;
+}
+
+function normalizeObservation(value) {
+  const notes = Array.isArray(value?.notes) ? value.notes : [];
+  return notes.slice(0, 5).map((note) => ({
+    text: String(note?.text || '').trim().slice(0, 60),
+    clue: String(note?.clue || '').trim().slice(0, 14),
+    x: clampPercent(note?.x),
+    y: clampPercent(note?.y),
+  })).filter((note) => note.text);
+}
+
+const OBSERVE_PROMPT = `당신은 토끼 탐정 P입니다. 사건 사진을 처음 받아 혼잣말로 관찰합니다. 사진에서 실제로 보이는 것만 말하고, 미술 작품이나 작가 이름은 절대 말하지 마세요.
+아래 JSON만 출력하세요.
+{"notes":[{"text":"", "clue":"", "x":50, "y":50}]}
+- notes는 4개. 앞의 3개는 사진 속 구체적인 단서 하나씩(사물, 빛, 색, 구도 등), 마지막 1개는 사진 전체를 한 단어로 정리하는 말.
+- text: 탐정의 1인칭 혼잣말, 낮은 존댓말, 한국어 32자 이내. 예: "노란 우산이 먼저 눈에 들어오네요."
+- clue: 단서를 2~6자 명사로. 예: "노란 우산"
+- x, y: 그 단서가 사진에서 있는 위치(왼쪽 위 0, 오른쪽 아래 100). 마지막 정리 문장은 50, 50.`;
+
 function investigationStep(data) {
   const searches = (data?.output || []).filter((item) => item?.type === 'web_search_call');
   if (!searches.length) return 'observing';
@@ -119,11 +152,29 @@ export default async function handler(request) {
         headers: { authorization: `Bearer ${apiKey}` },
       });
       if (!response.ok) return json(response.status || 502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED' }, origin);
-      if (data.status === 'queued' || data.status === 'in_progress') return json(200, { ok: true, status: 'pending', responseId, investigationStep: investigationStep(data) }, origin);
+      if (data.status === 'queued' || data.status === 'in_progress') return json(200, { ok: true, status: 'pending', responseId, investigationStep: investigationStep(data), searchQueries: searchQueries(data) }, origin);
       if (data.status !== 'completed') return json(502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED', status: data.status || 'unknown' }, origin);
       const photoUrl = String(input.photoUrl || '').trim();
       const pairing = normalizePairing(parseJson(responseText(data)), photoUrl);
-      return json(200, { ok: true, status: 'completed', responseId, pairing }, origin);
+      return json(200, { ok: true, status: 'completed', responseId, pairing, searchQueries: searchQueries(data) }, origin);
+    }
+
+    if (action === 'observe') {
+      const photoUrl = String(input.photoUrl || '').trim();
+      if (!photoUrl || !isAllowedPhotoUrl(photoUrl)) return json(400, { ok: false, error: '업로드된 사진 주소가 필요합니다.', code: 'INVALID_PHOTO_URL' }, origin);
+      // A quick, low-detail look so the host can narrate this photo while the full search runs.
+      const { response, data } = await openAiJson('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: openAiHeaders(apiKey),
+        body: JSON.stringify({
+          model: process.env.PEAR_PLAY_OBSERVE_MODEL || process.env.PEAR_PLAY_MODEL || 'gpt-5.6',
+          reasoning: { effort: 'low' },
+          max_output_tokens: 800,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: OBSERVE_PROMPT }, { type: 'input_image', image_url: photoUrl, detail: 'low' }] }],
+        }),
+      });
+      if (!response.ok) return json(response.status || 502, { ok: false, error: failedOpenAiResponse(data), code: 'AI_REQUEST_FAILED' }, origin);
+      return json(200, { ok: true, notes: normalizeObservation(parseJson(responseText(data))) }, origin);
     }
 
     if (action !== 'start') return json(400, { ok: false, error: '지원하지 않는 AI 작업입니다.', code: 'INVALID_ACTION' }, origin);
