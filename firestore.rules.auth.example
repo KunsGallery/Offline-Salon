@@ -1,6 +1,8 @@
 // Auth-based rules for event operation.
-// Admin actions require Firebase Authentication.
-// For stronger production use, restrict admin access to specific UID/email allowlists.
+// Admin actions require a Google sign-in on the allowlist below (keep it in sync with
+// the ADMIN_EMAILS Netlify variable) or an `admins/{uid}` document.
+// Participants sign in anonymously; their participant document stores that uid and
+// every later participant, response and like write is checked against it.
 
 rules_version = '2';
 
@@ -12,7 +14,8 @@ service cloud.firestore {
 
     function isAdminByEmail() {
       return isSignedIn()
-        && request.auth.token.email in [
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in [
           'your-admin-email@example.com'
         ];
     }
@@ -26,7 +29,27 @@ service cloud.firestore {
       return isAdminByEmail() || isAdminByDoc();
     }
 
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
     match /sessions/{sessionId} {
+      function participantPath(participantId) {
+        return /databases/$(database)/documents/sessions/$(sessionId)/participants/$(participantId);
+      }
+
+      function ownsParticipant(participantId) {
+        return isSignedIn()
+          && participantId is string
+          && exists(participantPath(participantId))
+          && get(participantPath(participantId)).data.get('uid', '') == request.auth.uid;
+      }
+
+      function likesEnabled(questionId) {
+        let question = get(/databases/$(database)/documents/sessions/$(sessionId)/questions/$(questionId)).data;
+        return question.get('likesEnabled', false) == true || question.get('type', '') == 'artwork-title';
+      }
+
       allow read: if true;
       allow create, update, delete: if isAdmin();
 
@@ -37,16 +60,58 @@ service cloud.firestore {
 
       match /responses/{responseId} {
         allow read: if true;
-        allow create: if true;
-        allow update: if isAdmin()
-          || request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['value', 'nickname', 'likes', 'likedBy', 'updatedAt']);
+        allow create: if (ownsParticipant(request.resource.data.participantId)
+            && request.resource.data.keys().hasOnly(['questionId', 'participantId', 'nickname', 'value', 'hidden', 'likes', 'likedBy', 'createdAt', 'updatedAt'])
+            && request.resource.data.hidden == false
+            && request.resource.data.likes == 0
+            && request.resource.data.likedBy.size() == 0)
+          || isAdmin();
+        // Owner edits the answer only; another participant adds or removes exactly their own like.
+        allow update: if (ownsParticipant(resource.data.participantId)
+            && changedKeys().hasOnly(['value', 'nickname', 'updatedAt']))
+          || (ownsParticipant(request.resource.data.likeActor)
+            && request.resource.data.likeActor != resource.data.participantId
+            && changedKeys().hasOnly(['likes', 'likedBy', 'likeActor', 'updatedAt'])
+            && request.resource.data.likedBy.diff(resource.data.get('likedBy', {})).affectedKeys().hasOnly([request.resource.data.likeActor])
+            && request.resource.data.likes == request.resource.data.likedBy.size()
+            && likesEnabled(resource.data.questionId))
+          || isAdmin();
         allow delete: if isAdmin();
       }
 
       match /participants/{participantId} {
+        function participantKeysOnly() {
+          return request.resource.data.keys().hasOnly(['uid', 'nickname', 'avatar', 'grapeSelections', 'pearPairing', 'joinedAt', 'lastSeenAt']);
+        }
+
+        // Participants may hand in one photo; analysis results are written by admins only.
+        function uploadedPearPairing(value) {
+          return value == null
+            || (value.status == 'uploaded'
+              && value.get('analysis', null) == null
+              && value.get('finalArtwork', null) == null
+              && value.get('candidates', []).size() == 0);
+        }
+
+        function pearPairingAllowed() {
+          let before = resource.data.get('pearPairing', null);
+          let after = request.resource.data.get('pearPairing', null);
+          return after == before
+            || ((before == null || before.status == 'error') && uploadedPearPairing(after));
+        }
+
         allow read: if true;
-        allow create, update: if true;
+        allow create: if (isSignedIn()
+            && request.resource.data.get('uid', '') == request.auth.uid
+            && participantKeysOnly()
+            && uploadedPearPairing(request.resource.data.get('pearPairing', null)))
+          || isAdmin();
+        allow update: if (isSignedIn()
+            && resource.data.get('uid', '') == request.auth.uid
+            && request.resource.data.get('uid', '') == request.auth.uid
+            && participantKeysOnly()
+            && pearPairingAllowed())
+          || isAdmin();
         allow delete: if isAdmin();
       }
 
@@ -62,6 +127,11 @@ service cloud.firestore {
       match /decks/{deckId} {
         allow read: if true;
         allow create, update, delete: if isAdmin();
+      }
+
+      // Check-in roster: names, emails, phone digits. Never public.
+      match /checkins/{applicationId} {
+        allow read, create, update, delete: if isAdmin();
       }
     }
 

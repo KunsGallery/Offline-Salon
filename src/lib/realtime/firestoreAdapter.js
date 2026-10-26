@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -15,7 +16,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { createId } from '../ids';
-import { requireAdminUser } from '../auth';
+import { ensureParticipantUser, requireAdminUser } from '../auth';
 import { db } from '../firebase';
 import { createCheckinApplicationFromJoinPass, createCheckinToken, findCheckinApplication, normalizeCheckinApplication, parseCheckinPayload } from '../checkin';
 import { lookupJoinSalonPass } from '../joinPass';
@@ -43,6 +44,8 @@ const participantCache = new Map();
 const artworkCache = new Map();
 const deckCache = new Map();
 const artworkSecretCache = new Map();
+const checkinCache = new Map();
+const legacyCheckinMigrations = new Map();
 
 function ensureDb() {
   if (!db) {
@@ -76,13 +79,6 @@ function fromSessionDoc(id, data) {
       enabledModules: data.enabledModules || [],
       exhibitionReferences: data.exhibitionReferences || [],
       pearPreparedCases: data.pearPreparedCases || [],
-      checkinApplications: (data.checkinApplications || []).map((item) => ({
-        ...item,
-        checkedInAt: item.checkedInAt ? toIso(item.checkedInAt) : null,
-        joinCheckedInAt: item.joinCheckedInAt ? toIso(item.joinCheckedInAt) : null,
-        createdAt: item.createdAt ? toIso(item.createdAt) : null,
-        updatedAt: item.updatedAt ? toIso(item.updatedAt) : null,
-      })),
       status: data.status,
       currentQuestionId: data.currentQuestionId ?? null,
       showResults: data.showResults,
@@ -144,6 +140,17 @@ function fromParticipantDoc(participantId, data) {
     pearPairing: data.pearPairing || null,
     joinedAt: toIso(data.joinedAt),
     lastSeenAt: toIso(data.lastSeenAt),
+  });
+}
+
+function fromCheckinDoc(id, data) {
+  return normalizeCheckinApplication({
+    ...data,
+    id,
+    checkedInAt: data.checkedInAt ? toIso(data.checkedInAt) : null,
+    joinCheckedInAt: data.joinCheckedInAt ? toIso(data.joinCheckedInAt) : null,
+    createdAt: data.createdAt ? toIso(data.createdAt) : null,
+    updatedAt: data.updatedAt ? toIso(data.updatedAt) : null,
   });
 }
 
@@ -230,6 +237,47 @@ function decksCol(sessionId) {
   return collection(ensureDb(), 'sessions', sessionId, 'decks');
 }
 
+// Check-in rosters hold names, emails and phone digits, so they live in an admin-only
+// subcollection instead of the publicly readable session document.
+function checkinsCol(sessionId) {
+  return collection(ensureDb(), 'sessions', sessionId, 'checkins');
+}
+
+function checkinDocRef(sessionId, applicationId) {
+  return doc(ensureDb(), 'sessions', sessionId, 'checkins', applicationId);
+}
+
+async function readCheckinApplications(sessionId) {
+  const snap = await getDocs(checkinsCol(sessionId));
+  return snap.docs.map((item) => fromCheckinDoc(item.id, item.data())).filter(Boolean);
+}
+
+// Moves a roster still stored on the session document (pre-subcollection data) into
+// `checkins` and removes the public copy. Existing subcollection entries win.
+function migrateLegacyCheckins(sessionId) {
+  if (legacyCheckinMigrations.has(sessionId)) return legacyCheckinMigrations.get(sessionId);
+  const task = runTransaction(ensureDb(), async (transaction) => {
+    const sessionRef = sessionDocRef(sessionId);
+    const snap = await transaction.get(sessionRef);
+    if (!snap.exists() || !Object.prototype.hasOwnProperty.call(snap.data(), 'checkinApplications')) return 0;
+    const legacy = (snap.data().checkinApplications || [])
+      .map((item, index) => normalizeCheckinApplication(item, index))
+      .filter(Boolean);
+    const existing = await Promise.all(legacy.map((item) => transaction.get(checkinDocRef(sessionId, item.id))));
+    legacy.forEach((item, index) => {
+      if (!existing[index].exists()) transaction.set(checkinDocRef(sessionId, item.id), item);
+    });
+    transaction.update(sessionRef, { checkinApplications: deleteField() });
+    return legacy.length;
+  }).catch((error) => {
+    legacyCheckinMigrations.delete(sessionId);
+    console.error('[firestoreAdapter] legacy check-in migration failed:', error);
+    throw error;
+  });
+  legacyCheckinMigrations.set(sessionId, task);
+  return task;
+}
+
 function cleanRecord(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
@@ -284,7 +332,7 @@ const firestoreAdapter = {
   },
 
   getCheckinApplications(sessionId) {
-    return this.getSession(sessionId)?.checkinApplications || [];
+    return checkinCache.get(sessionId);
   },
 
   getArtworkSecrets(sessionId) {
@@ -311,7 +359,6 @@ const firestoreAdapter = {
       platform: 'offline-salon-core',
       enabledModules: Array.isArray(input.enabledModules) ? input.enabledModules : [],
       exhibitionReferences: [],
-      checkinApplications: [],
       status: input.status || 'draft',
       currentQuestionId: null,
       showResults: false,
@@ -379,13 +426,12 @@ const firestoreAdapter = {
   async upsertCheckinApplication(sessionId, input = {}) {
     requireAdminWrite();
     const id = input.id || createId('application');
+    await migrateLegacyCheckins(sessionId).catch(() => {});
     return runTransaction(ensureDb(), async (transaction) => {
-      const sessionRef = sessionDocRef(sessionId);
-      const snap = await transaction.get(sessionRef);
-      if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
-      const session = fromSessionDoc(snap.id, snap.data());
+      const ref = checkinDocRef(sessionId, id);
+      const snap = await transaction.get(ref);
+      const previous = snap.exists() ? fromCheckinDoc(snap.id, snap.data()) : null;
       const now = new Date().toISOString();
-      const previous = (session.checkinApplications || []).find((item) => item.id === id);
       const application = normalizeCheckinApplication({
         ...previous,
         ...input,
@@ -394,32 +440,23 @@ const firestoreAdapter = {
         createdAt: previous?.createdAt || now,
         updatedAt: now,
       });
-      const nextApplications = previous
-        ? session.checkinApplications.map((item) => item.id === id ? application : item)
-        : [...(session.checkinApplications || []), application];
-      transaction.update(sessionRef, { checkinApplications: nextApplications, updatedAt: serverTimestamp() });
+      transaction.set(ref, application);
       return application;
     });
   },
 
   async deleteCheckinApplication(sessionId, applicationId) {
     requireAdminWrite();
-    const session = await readSessionDoc(sessionId);
-    if (!session) throw new Error('세션을 찾을 수 없습니다.');
-    await updateDoc(sessionDocRef(sessionId), {
-      checkinApplications: (session.checkinApplications || []).filter((item) => item.id !== applicationId),
-      updatedAt: serverTimestamp(),
-    });
+    await migrateLegacyCheckins(sessionId).catch(() => {});
+    await deleteDoc(checkinDocRef(sessionId, applicationId));
   },
 
   async checkInApplication(sessionId, value, checkedInBy = 'admin') {
     requireAdminWrite();
-    const session = await readSessionDoc(sessionId);
-    if (!session) throw new Error('세션을 찾을 수 없습니다.');
+    await migrateLegacyCheckins(sessionId).catch(() => {});
     const payload = parseCheckinPayload(value);
-    const applications = session.checkinApplications || [];
+    const applications = await readCheckinApplications(sessionId);
     let application = findCheckinApplication(applications, payload);
-    let nextApplications = applications;
     let imported = false;
     let joinPass = null;
     if (!application && (payload.isJoinPayload || payload.token?.length >= 32)) {
@@ -427,38 +464,49 @@ const firestoreAdapter = {
       application = findCheckinApplication(applications, { ...payload, joinTokenHash: joinPass.tokenHash });
       if (!application) {
         application = createCheckinApplicationFromJoinPass(joinPass);
-        if (application) {
-          nextApplications = [...applications, application];
-          imported = true;
-        }
+        imported = Boolean(application);
       }
     }
     if (!application) return { ok: false, status: 'not-found', payload };
     if (application.status === 'cancelled') return { ok: false, status: 'cancelled', application };
-    if (application.checkedIn) return { ok: true, status: 'already', application, imported, joinPass };
-    const now = new Date().toISOString();
-    const next = { ...application, checkedIn: true, checkedInAt: now, checkedInBy, updatedAt: now };
-    await updateDoc(sessionDocRef(sessionId), {
-      checkinApplications: nextApplications.map((item) => item.id === application.id ? next : item),
-      updatedAt: serverTimestamp(),
+    return runTransaction(ensureDb(), async (transaction) => {
+      const ref = checkinDocRef(sessionId, application.id);
+      const snap = await transaction.get(ref);
+      const current = snap.exists() ? fromCheckinDoc(snap.id, snap.data()) : application;
+      if (current.checkedIn) return { ok: true, status: 'already', application: current, imported, joinPass };
+      const now = new Date().toISOString();
+      const next = { ...current, checkedIn: true, checkedInAt: now, checkedInBy, updatedAt: now };
+      transaction.set(ref, next);
+      return { ok: true, status: 'checked-in', application: next, imported, joinPass };
     });
-    return { ok: true, status: 'checked-in', application: next, imported, joinPass };
   },
 
   async undoCheckInApplication(sessionId, applicationId) {
     requireAdminWrite();
-    const session = await readSessionDoc(sessionId);
-    if (!session) throw new Error('세션을 찾을 수 없습니다.');
-    const applications = session.checkinApplications || [];
-    const application = applications.find((item) => item.id === applicationId);
-    if (!application) return null;
+    await migrateLegacyCheckins(sessionId).catch(() => {});
+    const ref = checkinDocRef(sessionId, applicationId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
     const now = new Date().toISOString();
-    const next = { ...application, checkedIn: false, checkedInAt: null, checkedInBy: null, updatedAt: now };
-    await updateDoc(sessionDocRef(sessionId), {
-      checkinApplications: applications.map((item) => item.id === applicationId ? next : item),
-      updatedAt: serverTimestamp(),
-    });
+    const next = { ...fromCheckinDoc(snap.id, snap.data()), checkedIn: false, checkedInAt: null, checkedInBy: null, updatedAt: now };
+    await setDoc(ref, next);
     return next;
+  },
+
+  subscribeCheckinApplications(sessionId, callback, onError) {
+    migrateLegacyCheckins(sessionId).catch((error) => onError?.(error));
+    return onSnapshot(
+      checkinsCol(sessionId),
+      (snap) => {
+        const applications = snap.docs.map((item) => fromCheckinDoc(item.id, item.data())).filter(Boolean);
+        checkinCache.set(sessionId, applications);
+        callback(applications);
+      },
+      (error) => {
+        console.error('[firestoreAdapter] subscribeCheckinApplications failed:', error);
+        onError?.(error);
+      },
+    );
   },
 
   async deleteSession(sessionId) {
@@ -476,6 +524,8 @@ const firestoreAdapter = {
     sSnap.docs.forEach((item) => batch.delete(item.ref));
     const dSnap = await getDocs(decksCol(sessionId));
     dSnap.docs.forEach((item) => batch.delete(item.ref));
+    const cSnap = await getDocs(checkinsCol(sessionId));
+    cSnap.docs.forEach((item) => batch.delete(item.ref));
     batch.delete(sessionDocRef(sessionId));
     await batch.commit();
     sessionCache.delete(sessionId);
@@ -485,12 +535,16 @@ const firestoreAdapter = {
     artworkCache.delete(sessionId);
     artworkSecretCache.delete(sessionId);
     deckCache.delete(sessionId);
+    checkinCache.delete(sessionId);
   },
 
   subscribeSessions(callback, onError) {
     return onSnapshot(
       sessionsRef(),
       (snap) => {
+        snap.docs
+          .filter((item) => Object.prototype.hasOwnProperty.call(item.data(), 'checkinApplications'))
+          .forEach((item) => migrateLegacyCheckins(item.id).catch(() => {}));
         const sessions = snap.docs.map((item) =>
           writeSessionCache(
             normalizeSession({
@@ -755,28 +809,20 @@ const firestoreAdapter = {
   },
 
   async createResponse(sessionId, input = {}) {
+    await ensureParticipantUser();
     const ref = responsesCol(sessionId);
     const session = await readSessionDoc(sessionId);
     const existing = (await readResponses(sessionId, input.questionId)).filter(
       (response) => response.participantId === input.participantId,
     );
-    const payload = {
-      questionId: input.questionId,
-      participantId: input.participantId,
-      nickname: input.nickname || '',
-      value: input.value,
-      hidden: existing[0]?.hidden ?? false,
-      likes: existing[0]?.likes ?? 0,
-      likedBy: existing[0]?.likedBy || {},
-      createdAt: existing[0]?.createdAt ? existing[0].createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
 
     if (existing[0] && !(session?.allowMultipleSubmissions ?? false)) {
-      await setDoc(doc(responsesCol(sessionId), existing[0].id), payload, { merge: true });
+      // Security rules let the owner change only the answer itself.
+      const ownerPatch = { value: input.value, nickname: input.nickname || '', updatedAt: serverTimestamp() };
+      await updateDoc(doc(responsesCol(sessionId), existing[0].id), ownerPatch);
       return normalizeResponse({
         ...existing[0],
-        ...payload,
+        value: input.value,
         id: existing[0].id,
         nickname: input.nickname || existing[0].nickname || '',
         createdAt: existing[0].createdAt,
@@ -784,6 +830,17 @@ const firestoreAdapter = {
       });
     }
 
+    const payload = {
+      questionId: input.questionId,
+      participantId: input.participantId,
+      nickname: input.nickname || '',
+      value: input.value,
+      hidden: false,
+      likes: 0,
+      likedBy: {},
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
     const created = await addDoc(ref, payload);
     return normalizeResponse({
       ...payload,
@@ -802,6 +859,7 @@ const firestoreAdapter = {
   },
 
   async updateOwnResponse(sessionId, responseId, participantId, patch = {}) {
+    await ensureParticipantUser();
     const responseRef = doc(responsesCol(sessionId), responseId);
     await runTransaction(ensureDb(), async (transaction) => {
       const snap = await transaction.get(responseRef);
@@ -823,6 +881,7 @@ const firestoreAdapter = {
   },
 
   async toggleResponseLike(sessionId, responseId, participantId) {
+    await ensureParticipantUser();
     const responseRef = doc(responsesCol(sessionId), responseId);
     return runTransaction(ensureDb(), async (transaction) => {
       const snap = await transaction.get(responseRef);
@@ -850,9 +909,12 @@ const firestoreAdapter = {
         likedBy[participantId] = true;
       }
       const likes = Object.keys(likedBy).length;
+      // `likeActor` names the participant whose like changed; rules check that the
+      // signed-in user owns that participant document.
       transaction.update(responseRef, {
         likedBy,
         likes,
+        likeActor: participantId,
         updatedAt: serverTimestamp(),
       });
       return normalizeResponse({
@@ -943,10 +1005,15 @@ const firestoreAdapter = {
     );
   },
 
-  async upsertParticipant(sessionId, participantId, data = {}) {
+  // Participants write their own document, stamped with their Firebase uid so rules can
+  // tie later writes to the same browser. Administrators pass `{ admin: true }` and never
+  // take over the uid (e.g. when the remote saves PEAR PLAY results).
+  async upsertParticipant(sessionId, participantId, data = {}, options = {}) {
     const participantPatch = {
       lastSeenAt: data.lastSeenAt || serverTimestamp(),
     };
+    if (options.admin) requireAdminWrite();
+    else participantPatch.uid = (await ensureParticipantUser()).uid;
     if (Object.prototype.hasOwnProperty.call(data, 'nickname')) participantPatch.nickname = data.nickname;
     if (Object.prototype.hasOwnProperty.call(data, 'avatar')) participantPatch.avatar = data.avatar;
     if (Object.prototype.hasOwnProperty.call(data, 'grapeSelections')) participantPatch.grapeSelections = data.grapeSelections;

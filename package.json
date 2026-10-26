@@ -14,7 +14,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "pretest:e2e": "npm run prepare:pdfjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-offline-salon \"node --test tests/rules/firestore-rules.mjs\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
@@ -31,8 +32,10 @@
     "recharts": "^2.13.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^6.0.5",
+    "firebase-tools": "^15.34.1",
     "vite": "^8.2.0"
   }
 }

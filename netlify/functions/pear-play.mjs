@@ -50,6 +50,32 @@ async function requireFirebaseUser(request) {
   return payload;
 }
 
+// Each call runs image analysis plus web search on the operator's OpenAI key, so only
+// administrators (the same allowlist as R2 uploads) may start or poll investigations.
+async function requireAdmin(request) {
+  const decoded = await requireFirebaseUser(request);
+  const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+  if (decoded.email && decoded.email_verified !== false && allowedEmails.includes(decoded.email.toLowerCase())) return decoded;
+  if (decoded.admin === true || decoded.role === 'admin') return decoded;
+  throw Object.assign(new Error('PEAR PLAY 추리는 관리자 계정에서만 시작할 수 있습니다.'), { status: 403, code: 'ADMIN_REQUIRED' });
+}
+
+// Only photos already uploaded to this project's R2 bucket may be sent to the model.
+function isAllowedPhotoUrl(value) {
+  const base = process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, '');
+  if (!base) throw Object.assign(new Error('R2_PUBLIC_BASE_URL 환경 변수가 필요합니다.'), { status: 503, code: 'CONFIG_MISSING' });
+  try {
+    const photo = new URL(value);
+    const allowed = new URL(base);
+    const basePath = allowed.pathname.replace(/\/$/, '');
+    return photo.protocol === 'https:'
+      && photo.origin === allowed.origin
+      && photo.pathname.startsWith(`${basePath}/sessions/`);
+  } catch {
+    return false;
+  }
+}
+
 function parseJson(text) {
   const source = String(text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
   const start = source.indexOf('{');
@@ -139,7 +165,7 @@ export default async function handler(request) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': origin, 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', vary: 'origin' } });
   if (request.method !== 'POST') return json(405, { ok: false, error: 'POST 요청만 지원합니다.', code: 'METHOD_NOT_ALLOWED' }, origin);
   try {
-    await requireFirebaseUser(request);
+    await requireAdmin(request);
     const input = await request.json().catch(() => ({}));
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) return json(503, { ok: false, error: 'PEAR PLAY AI가 아직 연결되지 않았습니다. 운영자에게 OPENAI_API_KEY 설정을 요청해 주세요.', code: 'AI_NOT_CONFIGURED' }, origin);
@@ -161,7 +187,7 @@ export default async function handler(request) {
 
     if (action !== 'start') return json(400, { ok: false, error: '지원하지 않는 AI 작업입니다.', code: 'INVALID_ACTION' }, origin);
     const photoUrl = String(input.photoUrl || '').trim();
-    if (!photoUrl || !/^https:\/\//i.test(photoUrl)) return json(400, { ok: false, error: '업로드된 사진 주소가 필요합니다.', code: 'INVALID_PHOTO_URL' }, origin);
+    if (!photoUrl || !isAllowedPhotoUrl(photoUrl)) return json(400, { ok: false, error: '업로드된 사진 주소가 필요합니다.', code: 'INVALID_PHOTO_URL' }, origin);
 
     const { response, data } = await openAiJson('https://api.openai.com/v1/responses', {
       method: 'POST',

@@ -7,7 +7,7 @@
 3. 참가자는 QR로 들어와 사진 한 장을 업로드합니다.
 4. 사진은 R2의 `sessions/{sessionId}/pear/...` 경로에 저장되고 호스트 대기 목록에 나타납니다.
 5. 호스트가 사진을 선택하면 호스트 화면에 사진이 크게 열립니다.
-6. 리모컨에서 `토끼 탐정의 추리 시작`을 눌러야 Netlify Function `pear-play`가 사진을 분석하고 웹 검색으로 실제 작품 후보를 확인합니다.
+6. 관리자 리모컨에서 `토끼 탐정의 추리 시작`을 눌러야 Netlify Function `pear-play`가 사진을 분석하고 웹 검색으로 실제 작품 후보를 확인합니다.
 7. 분석 결과는 Firestore `sessions/{sessionId}/participants/{participantId}.pearPairing`에 저장됩니다.
 8. 호스트는 `작품 공개하기`를 눌러야 작품 이미지와 작가, 제목, 연도, 크기, 재료 캡션을 공개할 수 있습니다.
 9. `CASE BOARD`에서 공개된 모든 Pair를 한 화면에 모읍니다.
@@ -21,6 +21,8 @@ OPENAI_API_KEY=sk-...
 PEAR_PLAY_MODEL=gpt-5.6
 PEAR_PLAY_ALLOWED_ORIGINS=https://salon.unframe.kr
 ```
+
+`pear-play` 함수는 `ADMIN_EMAILS`에 등록된 관리자 로그인 토큰만 받습니다. 사진 주소는 `R2_PUBLIC_BASE_URL` 아래 `sessions/` 경로여야 하며, 이 값이 없으면 함수가 503을 반환합니다. 익명 참가자는 AI 분석을 직접 호출할 수 없습니다.
 
 `OPENAI_API_KEY`는 브라우저 변수로 만들지 말고 Netlify Functions 런타임에만 둡니다. 값을 등록하거나 수정한 뒤에는 반드시 새 배포가 필요합니다.
 

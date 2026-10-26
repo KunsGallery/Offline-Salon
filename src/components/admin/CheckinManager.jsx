@@ -3,6 +3,7 @@ import QRJoinCard from '../host/QRJoinCard';
 import { checkinSummary, createCheckinToken, sortCheckinApplications } from '../../lib/checkin';
 import { formatDateTime } from '../../lib/format';
 import { realtime } from '../../lib/realtime';
+import { useCheckinApplications } from '../../hooks/useCheckinApplications';
 
 const emptyForm = { name: '', email: '', phoneLast4: '', ticketType: '일반', checkinToken: '', notes: '' };
 
@@ -13,7 +14,8 @@ export default function CheckinManager({ session }) {
   const [filter, setFilter] = useState('all');
   const [busyId, setBusyId] = useState('');
   const [message, setMessage] = useState('');
-  const applications = useMemo(() => sortCheckinApplications(session.checkinApplications || []), [session.checkinApplications]);
+  const { applications: rosterApplications } = useCheckinApplications(session.id);
+  const applications = useMemo(() => sortCheckinApplications(rosterApplications), [rosterApplications]);
   const summary = checkinSummary(applications);
   const checkinUrl = `${window.location.origin}/checkin/${encodeURIComponent(session.id)}`;
   const filtered = applications.filter((item) => {

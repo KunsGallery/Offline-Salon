@@ -439,6 +439,10 @@ const localAdapter = {
     return () => set.delete(callback);
   },
 
+  subscribeCheckinApplications(sessionId, callback) {
+    return this.subscribeSession(sessionId, () => callback(readCheckinApplications(sessionId)));
+  },
+
   subscribeArtworkSecrets(sessionId, callback) {
     const unsubscribe = this.subscribeSession(sessionId, (session) => callback({ ...(session?.artworkSecrets || {}) }));
     return unsubscribe;

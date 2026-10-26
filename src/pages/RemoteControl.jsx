@@ -132,13 +132,13 @@ export default function RemoteControl() {
           photoUrl: selectedPairing.photoUrl,
           photoPath: selectedPairing.photoPath || null,
         },
-      });
+      }, { admin: true });
       await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'found', pearInvestigationStep: 'found' }, status: 'live' });
     } catch (reason) {
       await realtime.upsertParticipant(session.id, participant.participantId, {
         nickname: participant.nickname,
         pearPairing: { ...selectedPairing, status: 'error', error: reason?.message || '추리에 실패했습니다.', updatedAt: new Date().toISOString() },
-      });
+      }, { admin: true });
       await realtime.updateSession(session.id, { currentQuestionId: null, stage: { ...investigatingStage, pearPhase: 'photo', pearInvestigationStep: 'idle' }, status: 'live' });
       throw reason;
     }

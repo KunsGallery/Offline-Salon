@@ -20,12 +20,16 @@ test-results
 
 # logs
 npm-debug.log*
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
 # system
 .DS_Store
+__pycache__/
 
 # editor
 .vscode/*

@@ -41,8 +41,27 @@ R2 Function까지 포함한 로컬 통합 실행은 `npx netlify dev`를 사용�
 
 이 규칙은 링크를 아는 모든 사람이 세션/질문/응답 데이터를 수정할 수 있으므로, 실제 공개 운영 전에는 관리자 인증과 권한 분리가 필요합니다.
 
-현재 참여자 좋아요/수정 기능은 비로그인 참여자를 기준으로 하므로, `participantId`는 브라우저 `localStorage` 기반입니다.
-공개 대규모 운영에서는 익명 Auth 또는 세션 토큰 기반 검증으로 보강해야 합니다.
+실제 운영에는 `firestore.rules.auth.example`을 사용합니다. 배포 전 관리자 이메일 목록을 Netlify `ADMIN_EMAILS`와 같게 바꾸고, Firebase Authentication에서 **Google**과 **익명** 로그인을 모두 켜야 합니다.
+
+참여자는 Firebase 익명 로그인 후 참여자 문서에 자신의 `uid`를 저장합니다. 이후 참여자 정보, 응답 수정, 좋아요는 그 `uid`와 일치할 때만 허용됩니다. 응답의 숨김·좋아요 수·작성자를 참여자가 임의로 바꿀 수 없고, PEAR PLAY 분석 결과는 관리자만 기록합니다.
+
+이 규칙 이전에 만들어진 참여자 문서에는 `uid`가 없어 수정할 수 없습니다. 규칙은 행사 중이 아닌 시점에 배포하세요.
+
+체크인 명단(이름·이메일·전화 뒷자리)은 공개 세션 문서가 아니라 관리자만 읽는 `sessions/{sessionId}/checkins/{applicationId}`에 저장합니다. 예전 세션 문서에 남은 `checkinApplications` 배열은 관리자가 `/admin` 목록이나 해당 세션의 체크인 화면을 열 때 하위 컬렉션으로 옮겨지고 세션 문서에서 삭제됩니다.
+
+### 보안 규칙 테스트
+
+`firestore.rules.auth.example`은 Firebase 에뮬레이터 테스트(`tests/rules/firestore-rules.mjs`)로 검증합니다. 에뮬레이터에는 Java 11 이상이 필요합니다.
+
+```bash
+brew install openjdk@21
+```
+
+```bash
+PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" npm run test:rules
+```
+
+규칙을 바꿀 때는 Console에 배포하기 전에 이 테스트를 먼저 통과시킵니다. 테스트의 관리자 이메일은 규칙 파일의 예시 값(`your-admin-email@example.com`)을 사용하므로, 실제 이메일로 바꾼 사본은 저장소에 커밋하지 않습니다.
 
 ## 권한 구조
 
@@ -50,11 +69,11 @@ Public Read:
 - Host Display
 - Participant App
 
-Public Write:
+Participant Write (익명 로그인 uid 확인):
+- Participant own document create/update (nickname, avatar, grape, PEAR photo hand-in)
 - Participant response create
-- Participant lastSeen update
 - Participant own-response update
-- Participant response like toggle
+- Participant response like toggle (own like only)
 
 Admin Only:
 - session create/update/delete
@@ -67,6 +86,8 @@ Admin Only:
 - CSV export
 - reset session
 - end session
+- check-in roster read/write
+- PEAR PLAY AI investigation (Netlify Function, `ADMIN_EMAILS`)
 
 ## Firestore 모드 테스트 체크리스트
 

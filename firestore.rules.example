@@ -41,6 +41,10 @@ service cloud.firestore {
       match /decks/{deckId} {
         allow read, create, update, delete: if true;
       }
+
+      match /checkins/{applicationId} {
+        allow read, create, update, delete: if true;
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import RealtimeStatusBanner from '../components/RealtimeStatusBanner';
+import { useCheckinApplications } from '../hooks/useCheckinApplications';
 import { useSession } from '../hooks/useSession';
 import { getCurrentUser } from '../lib/auth';
 import { checkinSummary, createCheckinApplicationFromJoinPass, findCheckinApplication, parseCheckinPayload, sortCheckinApplications } from '../lib/checkin';
@@ -114,6 +115,7 @@ export default function CheckinPage() {
   const attemptRef = useRef(0);
   const decodeDurationRef = useRef(null);
   const { session, loading, error } = useSession(sessionId, { lightweight: true });
+  const { applications: rosterApplications, error: rosterError } = useCheckinApplications(sessionId);
   const [manualValue, setManualValue] = useState('');
   const [scannerState, setScannerState] = useState('idle');
   const [scannerMessage, setScannerMessage] = useState('');
@@ -130,7 +132,7 @@ export default function CheckinPage() {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem('offline-salon:checkin-sound') !== 'off';
   });
-  const applications = useMemo(() => sortCheckinApplications(session?.checkinApplications || []), [session?.checkinApplications]);
+  const applications = useMemo(() => sortCheckinApplications(rosterApplications), [rosterApplications]);
   const summary = checkinSummary(applications);
   const recent = applications.filter((item) => item.checkedIn).slice(0, 6);
 
@@ -246,7 +248,7 @@ export default function CheckinPage() {
           tokenHash: '',
           joinCheckedInAt: joinResult.checkedInAt || null,
         };
-        const existing = findCheckinApplication(session.checkinApplications || [], {
+        const existing = findCheckinApplication(rosterApplications, {
           joinParticipantId: joinPass.participantId,
         });
         const imported = createCheckinApplicationFromJoinPass({
@@ -430,6 +432,7 @@ export default function CheckinPage() {
   const parsed = parseCheckinPayload(manualValue);
 
   return <main className="checkin-shell" style={sessionThemeStyle(session)}>
+    {rosterError ? <RealtimeStatusBanner error={rosterError} compact /> : null}
     <section className="checkin-hero">
       <div><span>UNFRAME SALON CHECK-IN</span><h1>{session.title}</h1><p>Join에서 발급된 개인 QR을 Salon 출석 명단으로 연결하는 입장 확인 전용 화면입니다.</p></div>
       <aside><strong>{summary.checkedIn}</strong><span>/ {summary.registered} 입장</span><i style={{ '--checkin-progress': summary.registered ? summary.checkedIn / summary.registered : 0 }} /></aside>

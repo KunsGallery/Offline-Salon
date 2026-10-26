@@ -3,7 +3,7 @@ import { getCurrentUser } from './auth';
 async function requestPearApi(payload) {
   const user = getCurrentUser();
   const token = await user?.getIdToken?.();
-  if (!token) throw new Error('사진 분석을 시작하려면 세션에 먼저 참여해 주세요.');
+  if (!token) throw new Error('PEAR PLAY 추리는 관리자 로그인 후 시작할 수 있습니다.');
   const response = await fetch('/.netlify/functions/pear-play', {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

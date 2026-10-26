@@ -20,6 +20,7 @@ import { useParticipants } from '../hooks/useParticipants';
 import { useQuestions } from '../hooks/useQuestions';
 import { useAllResponses, useResponses } from '../hooks/useResponses';
 import { useSession } from '../hooks/useSession';
+import { useCheckinApplications } from '../hooks/useCheckinApplications';
 import { sessionThemeStyle } from '../lib/colorPalette';
 
 function copyText(text) {
@@ -31,6 +32,7 @@ export default function AdminSession() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { session, loading: sessionLoading, error: sessionError } = useSession(sessionId);
+  const { applications: checkinApplications } = useCheckinApplications(sessionId);
   const { questions, loading: questionsLoading, error: questionsError } = useQuestions(sessionId);
   const activeQuestion = useMemo(
     () => questions.find((question) => question.id === session?.currentQuestionId) || questions.find((question) => question.isActive) || null,
@@ -177,7 +179,7 @@ export default function AdminSession() {
 
       {section === 'engagement' ? <section className="admin-workspace engagement-workspace"><div className="engagement-metrics"><article><span>현재 접속</span><strong>{participants.length}</strong></article><article><span>현재 응답</span><strong>{responses.filter((item) => !item.hidden).length}</strong></article><article><span>숨긴 응답</span><strong>{responses.filter((item) => item.hidden).length}</strong></article><article><span>총 좋아요</span><strong>{responses.reduce((sum, item) => sum + Number(item.likes || 0), 0)}</strong></article></div><ResponseMonitor session={session} responses={responses} activeQuestion={activeQuestion} /><section className="panel"><div className="panel-header"><div><h2>응답 내보내기</h2><p className="muted">현재 세션의 모든 응답을 CSV로 저장합니다.</p></div></div><ExportButton session={session} /></section></section> : null}
 
-      {section === 'access' ? <section className="admin-workspace access-workspace"><section className="panel"><div className="panel-header"><div><p className="eyebrow">JOIN & CONTROL</p><h2>참여자·관리자 접속</h2><p className="muted">참여자, 리모컨, 입장 체크 화면을 각각 별도 URL로 엽니다.</p></div></div><div className="admin-qr-grid"><QRJoinCard sessionId={sessionId} /><QRJoinCard url={remoteUrl} title="관리자 휴대폰으로 스캔해 리모컨을 여세요" /><QRJoinCard url={checkinUrl} title="스태프 체크인 화면을 여세요" /></div></section><section className="panel readiness-card"><p className="eyebrow">EVENT CHECK</p><h2>행사 전 점검</h2><ul><li className={session.status === 'live' ? 'done' : ''}>세션 라이브 상태</li><li className={activeQuestion ? 'done' : ''}>활성 질문 준비</li><li className={(session.artworks?.length || session.decks?.length) ? 'done' : ''}>작품 또는 PDF 등록</li><li className={participants.length ? 'done' : ''}>참여자 연결 테스트</li><li className={(session.checkinApplications?.length || 0) ? 'done' : ''}>체크인 명단 준비</li></ul><button className="btn" onClick={() => window.open(hostUrl, '_blank', 'noopener,noreferrer')}>Host 화면 점검</button><button className="btn" onClick={() => window.open(checkinUrl, '_blank', 'noopener,noreferrer')}>체크인 화면 점검</button><button className="btn primary" onClick={() => window.open(remoteUrl, '_blank', 'noopener,noreferrer')}>리모컨 점검</button></section></section> : null}
+      {section === 'access' ? <section className="admin-workspace access-workspace"><section className="panel"><div className="panel-header"><div><p className="eyebrow">JOIN & CONTROL</p><h2>참여자·관리자 접속</h2><p className="muted">참여자, 리모컨, 입장 체크 화면을 각각 별도 URL로 엽니다.</p></div></div><div className="admin-qr-grid"><QRJoinCard sessionId={sessionId} /><QRJoinCard url={remoteUrl} title="관리자 휴대폰으로 스캔해 리모컨을 여세요" /><QRJoinCard url={checkinUrl} title="스태프 체크인 화면을 여세요" /></div></section><section className="panel readiness-card"><p className="eyebrow">EVENT CHECK</p><h2>행사 전 점검</h2><ul><li className={session.status === 'live' ? 'done' : ''}>세션 라이브 상태</li><li className={activeQuestion ? 'done' : ''}>활성 질문 준비</li><li className={(session.artworks?.length || session.decks?.length) ? 'done' : ''}>작품 또는 PDF 등록</li><li className={participants.length ? 'done' : ''}>참여자 연결 테스트</li><li className={checkinApplications.length ? 'done' : ''}>체크인 명단 준비</li></ul><button className="btn" onClick={() => window.open(hostUrl, '_blank', 'noopener,noreferrer')}>Host 화면 점검</button><button className="btn" onClick={() => window.open(checkinUrl, '_blank', 'noopener,noreferrer')}>체크인 화면 점검</button><button className="btn primary" onClick={() => window.open(remoteUrl, '_blank', 'noopener,noreferrer')}>리모컨 점검</button></section></section> : null}
     </main>
   );
 }
