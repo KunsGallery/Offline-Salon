@@ -7,7 +7,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/pdfjs-dist')) return 'pdf';
+          // pdf.js is left to automatic splitting: a manual 'pdf' chunk also captured Vite's
+          // lazy-import helper, which made every page preload pdf.js.
           if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) return 'firebase';
           if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) return 'charts';
           if (id.includes('node_modules/framer-motion')) return 'motion';

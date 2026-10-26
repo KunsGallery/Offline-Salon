@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { pdfDocumentOptions, pdfjs } from '../../lib/pdf';
 import { clampPdfZoom, PDF_ZOOM_PRESETS } from '../../lib/pdfView';
 import { safeJoin } from '../../lib/format';
 import { buildResultGallery } from '../../lib/resultGallery';
@@ -23,14 +22,19 @@ export function PdfPageCanvas({ url, pageNumber, fitMode = 'fit', zoom = 1, comp
     setStatus('loading');
     setActiveCanvas(-1);
     activeCanvasRef.current = -1;
-    const task = pdfjs.getDocument(pdfDocumentOptions({
-      url,
-      disableRange: true,
-      disableStream: true,
-      disableAutoFetch: true,
-    }));
-    task.promise.then((document) => { if (active) { setStatus('loading'); setPdfDocument(document); } }).catch(() => { if (active) setStatus('error'); });
-    return () => { active = false; task.destroy(); };
+    let task = null;
+    // pdf.js (~430KB) loads only when a PDF is actually shown, not with every screen.
+    import('../../lib/pdf').then(({ pdfDocumentOptions, pdfjs }) => {
+      if (!active) return null;
+      task = pdfjs.getDocument(pdfDocumentOptions({
+        url,
+        disableRange: true,
+        disableStream: true,
+        disableAutoFetch: true,
+      }));
+      return task.promise;
+    }).then((document) => { if (active && document) { setStatus('loading'); setPdfDocument(document); } }).catch(() => { if (active) setStatus('error'); });
+    return () => { active = false; task?.destroy(); };
   }, [url]);
   useEffect(() => {
     if (!hostRef.current || typeof ResizeObserver === 'undefined') return undefined;
