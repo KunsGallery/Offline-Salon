@@ -11,6 +11,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1',
     url: 'http://127.0.0.1:5173',
+    // The specs drive the local adapter; keep .env.local (often firestore) out of it.
+    env: { VITE_REALTIME_MODE: 'local' },
     reuseExistingServer: true,
   },
   projects: [

@@ -129,6 +129,12 @@ service cloud.firestore {
         allow create, update, delete: if isAdmin();
       }
 
+      // Prepared PEAR reverse cases: shown on the host screen, prepared by admins.
+      match /pearCases/{caseId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
       // Check-in roster: names, emails, phone digits. Never public.
       match /checkins/{applicationId} {
         allow read, create, update, delete: if isAdmin();

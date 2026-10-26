@@ -46,6 +46,8 @@ const deckCache = new Map();
 const artworkSecretCache = new Map();
 const checkinCache = new Map();
 const legacyCheckinMigrations = new Map();
+const pearCaseCache = new Map();
+const legacyPearCaseMigrations = new Map();
 
 function ensureDb() {
   if (!db) {
@@ -178,6 +180,7 @@ function composeSession(sessionId, baseSession = sessionCache.get(sessionId)) {
       ...baseSession,
       artworks: artworkCache.has(sessionId) ? artworkCache.get(sessionId) : baseSession.artworks || [],
       decks: deckCache.has(sessionId) ? deckCache.get(sessionId) : baseSession.decks || [],
+      pearPreparedCases: mergePreparedPearCases(pearCaseCache.get(sessionId), baseSession.pearPreparedCases),
       questions: questionCache.get(sessionId) || baseSession.questions || [],
       responses: responseCache.get(sessionId) || baseSession.responses || [],
       participants: Object.fromEntries(
@@ -235,6 +238,50 @@ function artworkSecretsCol(sessionId) {
 
 function decksCol(sessionId) {
   return collection(ensureDb(), 'sessions', sessionId, 'decks');
+}
+
+// Prepared PEAR cases carry full analyses and candidates (up to 24 per session), so they
+// live in their own subcollection instead of riding along with every stage change.
+function pearCasesCol(sessionId) {
+  return collection(ensureDb(), 'sessions', sessionId, 'pearCases');
+}
+
+function pearCaseDocRef(sessionId, caseId) {
+  return doc(ensureDb(), 'sessions', sessionId, 'pearCases', caseId);
+}
+
+function fromPearCaseDoc(id, data) {
+  return { ...data, id };
+}
+
+// Subcollection entries win over a legacy array still stored on the session document.
+function mergePreparedPearCases(cached, legacy) {
+  const items = cached || [];
+  const ids = new Set(items.map((item) => item.id));
+  return [...items, ...(legacy || []).filter((item) => !ids.has(item.id))]
+    .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+}
+
+function migrateLegacyPearCases(sessionId) {
+  if (legacyPearCaseMigrations.has(sessionId)) return legacyPearCaseMigrations.get(sessionId);
+  const task = runTransaction(ensureDb(), async (transaction) => {
+    const sessionRef = sessionDocRef(sessionId);
+    const snap = await transaction.get(sessionRef);
+    if (!snap.exists() || !Object.prototype.hasOwnProperty.call(snap.data(), 'pearPreparedCases')) return 0;
+    const legacy = (snap.data().pearPreparedCases || []).filter((item) => item?.id);
+    const existing = await Promise.all(legacy.map((item) => transaction.get(pearCaseDocRef(sessionId, item.id))));
+    legacy.forEach((item, index) => {
+      if (!existing[index].exists()) transaction.set(pearCaseDocRef(sessionId, item.id), cleanRecord({ ...item, id: undefined }));
+    });
+    transaction.update(sessionRef, { pearPreparedCases: deleteField() });
+    return legacy.length;
+  }).catch((error) => {
+    legacyPearCaseMigrations.delete(sessionId);
+    console.error('[firestoreAdapter] legacy PEAR case migration failed:', error);
+    throw error;
+  });
+  legacyPearCaseMigrations.set(sessionId, task);
+  return task;
 }
 
 // Check-in rosters hold names, emails and phone digits, so they live in an admin-only
@@ -394,32 +441,35 @@ const firestoreAdapter = {
   async upsertPreparedPearCase(sessionId, input) {
     requireAdminWrite();
     const id = input.id || createId('pear_case');
+    await migrateLegacyPearCases(sessionId).catch(() => {});
+    const existingCount = input.id ? 0 : (await getDocs(pearCasesCol(sessionId))).size;
     return runTransaction(ensureDb(), async (transaction) => {
-      const ref = sessionDocRef(sessionId);
+      const ref = pearCaseDocRef(sessionId, id);
       const snap = await transaction.get(ref);
-      if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
-      const items = snap.data().pearPreparedCases || [];
-      const previous = items.find((item) => item.id === id);
-      if (!previous && items.length >= 24) throw new Error('사전 조사 사진은 세션당 24장까지 등록할 수 있습니다.');
+      const previous = snap.exists() ? fromPearCaseDoc(snap.id, snap.data()) : null;
+      if (!previous && existingCount >= 24) throw new Error('사전 조사 사진은 세션당 24장까지 등록할 수 있습니다.');
       const now = new Date().toISOString();
       const item = { ...previous, ...input, id, createdAt: previous?.createdAt || now, updatedAt: now };
-      transaction.update(ref, { pearPreparedCases: previous ? items.map((entry) => entry.id === id ? item : entry) : [...items, item], updatedAt: serverTimestamp() });
+      transaction.set(ref, cleanRecord({ ...item, id: undefined }));
       return item;
     });
   },
 
   async deletePreparedPearCase(sessionId, id) {
     requireAdminWrite();
+    await migrateLegacyPearCases(sessionId).catch(() => {});
     return runTransaction(ensureDb(), async (transaction) => {
       const ref = sessionDocRef(sessionId);
       const snap = await transaction.get(ref);
       if (!snap.exists()) throw new Error('세션을 찾을 수 없습니다.');
       const data = snap.data();
-      transaction.update(ref, {
-        pearPreparedCases: (data.pearPreparedCases || []).filter((item) => item.id !== id),
-        ...(data.stage?.pearPreparedCaseId === id ? { stage: { ...data.stage, pearPreparedCaseId: null, pearParticipantId: null, pearView: 'wall', pearPhase: 'photo' } } : {}),
-        updatedAt: serverTimestamp(),
-      });
+      transaction.delete(pearCaseDocRef(sessionId, id));
+      if (data.stage?.pearPreparedCaseId === id) {
+        transaction.update(ref, {
+          stage: { ...data.stage, pearPreparedCaseId: null, pearParticipantId: null, pearView: 'wall', pearPhase: 'photo' },
+          updatedAt: serverTimestamp(),
+        });
+      }
     });
   },
 
@@ -526,6 +576,8 @@ const firestoreAdapter = {
     dSnap.docs.forEach((item) => batch.delete(item.ref));
     const cSnap = await getDocs(checkinsCol(sessionId));
     cSnap.docs.forEach((item) => batch.delete(item.ref));
+    const pcSnap = await getDocs(pearCasesCol(sessionId));
+    pcSnap.docs.forEach((item) => batch.delete(item.ref));
     batch.delete(sessionDocRef(sessionId));
     await batch.commit();
     sessionCache.delete(sessionId);
@@ -536,6 +588,7 @@ const firestoreAdapter = {
     artworkSecretCache.delete(sessionId);
     deckCache.delete(sessionId);
     checkinCache.delete(sessionId);
+    pearCaseCache.delete(sessionId);
   },
 
   subscribeSessions(callback, onError) {
@@ -545,6 +598,9 @@ const firestoreAdapter = {
         snap.docs
           .filter((item) => Object.prototype.hasOwnProperty.call(item.data(), 'checkinApplications'))
           .forEach((item) => migrateLegacyCheckins(item.id).catch(() => {}));
+        snap.docs
+          .filter((item) => Object.prototype.hasOwnProperty.call(item.data(), 'pearPreparedCases'))
+          .forEach((item) => migrateLegacyPearCases(item.id).catch(() => {}));
         const sessions = snap.docs.map((item) =>
           writeSessionCache(
             normalizeSession({
@@ -595,6 +651,10 @@ const firestoreAdapter = {
         }, onError));
         unsubscribes.push(onSnapshot(query(decksCol(sessionId), orderBy('order', 'asc')), (snap) => {
           deckCache.set(sessionId, snap.docs.map((item) => fromAssetDoc(item.id, item.data())));
+          emitSession();
+        }, onError));
+        unsubscribes.push(onSnapshot(pearCasesCol(sessionId), (snap) => {
+          pearCaseCache.set(sessionId, snap.docs.map((item) => fromPearCaseDoc(item.id, item.data())));
           emitSession();
         }, onError));
       }

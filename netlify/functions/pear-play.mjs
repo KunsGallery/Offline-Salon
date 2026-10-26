@@ -1,69 +1,10 @@
-import { decodeProtectedHeader, importX509, jwtVerify } from 'jose';
-
-const FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
-let certificateCache = { expiresAt: 0, values: {} };
-
-function json(status, body, origin = '*') {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-      'access-control-allow-origin': origin,
-      'access-control-allow-headers': 'authorization, content-type',
-      'access-control-allow-methods': 'POST, OPTIONS',
-      vary: 'origin',
-    },
-  });
-}
-
-function allowedOrigin(request) {
-  const origin = request.headers.get('origin') || '';
-  const requestOrigin = new URL(request.url).origin;
-  const configured = [process.env.URL, ...(process.env.PEAR_PLAY_ALLOWED_ORIGINS || '').split(',')]
-    .map((value) => value?.trim().replace(/\/$/, ''))
-    .filter(Boolean);
-  if (!origin || origin === requestOrigin || configured.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return origin || '*';
-  return '';
-}
-
-async function firebaseCertificates() {
-  if (certificateCache.expiresAt > Date.now() && Object.keys(certificateCache.values).length) return certificateCache.values;
-  const response = await fetch(FIREBASE_CERTS_URL);
-  if (!response.ok) throw new Error('Firebase 인증서를 불러오지 못했습니다.');
-  const maxAge = Number(response.headers.get('cache-control')?.match(/max-age=(\d+)/)?.[1] || 3600);
-  certificateCache = { expiresAt: Date.now() + maxAge * 1000, values: await response.json() };
-  return certificateCache.values;
-}
-
-async function requireFirebaseUser(request) {
-  const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ')) throw Object.assign(new Error('참여자 인증이 필요합니다.'), { status: 401, code: 'AUTH_REQUIRED' });
-  const token = authorization.slice(7);
-  const projectId = process.env.FIREBASE_PROJECT_ID?.trim() || process.env.VITE_FIREBASE_PROJECT_ID?.trim();
-  if (!projectId) throw Object.assign(new Error('FIREBASE_PROJECT_ID 환경 변수가 필요합니다.'), { status: 503, code: 'CONFIG_MISSING' });
-  const header = decodeProtectedHeader(token);
-  const certificate = (await firebaseCertificates())[header.kid];
-  if (header.alg !== 'RS256' || !certificate) throw Object.assign(new Error('Firebase 로그인 토큰을 확인할 수 없습니다.'), { status: 401, code: 'INVALID_AUTH_TOKEN' });
-  const key = await importX509(certificate, 'RS256');
-  const { payload } = await jwtVerify(token, key, { algorithms: ['RS256'], audience: projectId, issuer: `https://securetoken.google.com/${projectId}` });
-  return payload;
-}
-
-// Each call runs image analysis plus web search on the operator's OpenAI key, so only
-// administrators (the same allowlist as R2 uploads) may start or poll investigations.
-async function requireAdmin(request) {
-  const decoded = await requireFirebaseUser(request);
-  const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
-  if (decoded.email && decoded.email_verified !== false && allowedEmails.includes(decoded.email.toLowerCase())) return decoded;
-  if (decoded.admin === true || decoded.role === 'admin') return decoded;
-  throw Object.assign(new Error('PEAR PLAY 추리는 관리자 계정에서만 시작할 수 있습니다.'), { status: 403, code: 'ADMIN_REQUIRED' });
-}
+import { requireAdmin } from '../lib/firebaseAuth.mjs';
+import { guardPost, httpError, json } from '../lib/http.mjs';
 
 // Only photos already uploaded to this project's R2 bucket may be sent to the model.
 function isAllowedPhotoUrl(value) {
   const base = process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, '');
-  if (!base) throw Object.assign(new Error('R2_PUBLIC_BASE_URL 환경 변수가 필요합니다.'), { status: 503, code: 'CONFIG_MISSING' });
+  if (!base) throw httpError(503, 'CONFIG_MISSING', 'R2_PUBLIC_BASE_URL 환경 변수가 필요합니다.');
   try {
     const photo = new URL(value);
     const allowed = new URL(base);
@@ -160,12 +101,12 @@ function investigationStep(data) {
 }
 
 export default async function handler(request) {
-  const origin = allowedOrigin(request);
-  if (!origin) return json(403, { ok: false, error: '허용되지 않은 출처입니다.', code: 'ORIGIN_DENIED' }, 'null');
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': origin, 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS', vary: 'origin' } });
-  if (request.method !== 'POST') return json(405, { ok: false, error: 'POST 요청만 지원합니다.', code: 'METHOD_NOT_ALLOWED' }, origin);
+  const { origin, response: early } = guardPost(request, 'PEAR_PLAY_ALLOWED_ORIGINS');
+  if (early) return early;
   try {
-    await requireAdmin(request);
+    // Each call runs image analysis plus web search on the operator's OpenAI key, so only
+    // administrators may start or poll investigations.
+    await requireAdmin(request, 'PEAR PLAY 추리는 관리자 계정에서만 시작할 수 있습니다.');
     const input = await request.json().catch(() => ({}));
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) return json(503, { ok: false, error: 'PEAR PLAY AI가 아직 연결되지 않았습니다. 운영자에게 OPENAI_API_KEY 설정을 요청해 주세요.', code: 'AI_NOT_CONFIGURED' }, origin);

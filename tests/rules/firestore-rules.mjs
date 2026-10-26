@@ -215,4 +215,14 @@ describe('admin-only collections', () => {
   test('participants cannot write questions', async () => {
     await assertFails(setDoc(doc(alice(), `${SESSION}/questions/q-new`), { title: 'Spam' }));
   });
+
+  test('prepared PEAR cases are public to read and admin-only to write', async () => {
+    const pearCase = { title: 'Case', pearPairing: { status: 'uploaded', photoUrl: 'https://r2.example.com/sessions/s1/pear/a.jpg' } };
+    await assertSucceeds(setDoc(doc(admin(), `${SESSION}/pearCases/c1`), pearCase));
+    await assertSucceeds(getDoc(doc(guest(), `${SESSION}/pearCases/c1`)));
+    await assertFails(setDoc(doc(alice(), `${SESSION}/pearCases/c2`), pearCase));
+    await assertFails(updateDoc(doc(google(), `${SESSION}/pearCases/c1`), { title: 'Forged' }));
+    await assertFails(deleteDoc(doc(alice(), `${SESSION}/pearCases/c1`)));
+    await assertSucceeds(deleteDoc(doc(admin(), `${SESSION}/pearCases/c1`)));
+  });
 });
