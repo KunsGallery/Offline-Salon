@@ -37,11 +37,20 @@ R2 Function까지 포함한 로컬 통합 실행은 `npx netlify dev`를 사용�
 
 ## Firestore Rules 주의사항
 
+운영 프로젝트 `offline-salon`의 배포 규칙은 `firestore.rules`입니다.
+현재 운영 권한을 보존하며, 관리자 전용 `checkins`와 공개 읽기·관리자 쓰기 `pearCases` 경로를 포함합니다.
+이 파일은 기존 참가자와의 호환성을 위한 운영 규칙이며, 아래의 강화된 인증 예시와는 별도로 관리합니다.
+
+```bash
+PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" npx firebase emulators:exec --only firestore --project demo-offline-salon "node --test tests/rules/production-rules.mjs"
+npx firebase deploy --only firestore:rules --project offline-salon
+```
+
 `firestore.rules.example`의 공개 규칙은 리허설/폐쇄형 테스트용입니다.
 
 이 규칙은 링크를 아는 모든 사람이 세션/질문/응답 데이터를 수정할 수 있으므로, 실제 공개 운영 전에는 관리자 인증과 권한 분리가 필요합니다.
 
-실제 운영에는 `firestore.rules.auth.example`을 사용합니다. 배포 전 관리자 이메일 목록을 Netlify `ADMIN_EMAILS`와 같게 바꾸고, Firebase Authentication에서 **Google**과 **익명** 로그인을 모두 켜야 합니다.
+참가자 권한을 강화할 때는 `firestore.rules.auth.example`을 검토해 운영 규칙에 반영합니다. 배포 전 관리자 이메일 목록을 Netlify `ADMIN_EMAILS`와 같게 바꾸고, Firebase Authentication에서 **Google**과 **익명** 로그인을 모두 켜야 합니다.
 
 참여자는 Firebase 익명 로그인 후 참여자 문서에 자신의 `uid`를 저장합니다. 이후 참여자 정보, 응답 수정, 좋아요는 그 `uid`와 일치할 때만 허용됩니다. 응답의 숨김·좋아요 수·작성자를 참여자가 임의로 바꿀 수 없고, PEAR PLAY 분석 결과는 관리자만 기록합니다.
 

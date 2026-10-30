@@ -1,0 +1,107 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdminByEmail() {
+      return isSignedIn()
+        && request.auth.token.email in [
+          'gallerykuns@gmail.com',
+          'sylove887@gmail.com'
+        ];
+    }
+
+    function isAdminByDoc() {
+      return isSignedIn()
+        && exists(
+          /databases/$(database)/documents/admins/$(request.auth.uid)
+        );
+    }
+
+    function isAdmin() {
+      return isAdminByEmail() || isAdminByDoc();
+    }
+
+    match /sessions/{sessionId} {
+      // 참가자, Host, Remote가 세션 정보를 읽을 수 있음
+      allow read: if true;
+
+      // 세션 생성·수정·삭제는 관리자만 가능
+      allow create, update, delete: if isAdmin();
+
+      match /questions/{questionId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /responses/{responseId} {
+        allow read: if true;
+
+        // 참가자의 답변 작성
+        allow create: if isSignedIn();
+
+        // 관리자 또는 본인 답변의 제한된 필드만 수정
+        allow update: if isAdmin()
+          || (
+            isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'value',
+                'nickname',
+                'likes',
+                'likedBy',
+                'updatedAt'
+              ])
+          );
+
+        allow delete: if isAdmin();
+      }
+
+      match /participants/{participantId} {
+        // Remote와 Host가 참가자 목록을 읽을 수 있음
+        allow read: if true;
+
+        // 익명 로그인 참가자의 포도·배 Pair 저장 허용
+        allow create, update: if isSignedIn();
+
+        allow delete: if isAdmin();
+      }
+
+      match /artworks/{artworkId} {
+        // Host와 Remote에서 작품 이미지를 읽을 수 있음
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /artworkSecrets/{artworkId} {
+        // 제목·작가 등 비공개 작품 정보는 관리자만 읽음
+        allow read, create, update, delete: if isAdmin();
+      }
+
+      // Private check-in roster, migrated from legacy session arrays.
+      match /checkins/{applicationId} {
+        allow read, create, update, delete: if isAdmin();
+      }
+
+      // Host screens read prepared investigations; only admins may edit them.
+      match /pearCases/{caseId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+
+      match /decks/{deckId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
