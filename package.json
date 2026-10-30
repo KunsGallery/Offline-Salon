@@ -24,6 +24,7 @@
     "@zxing/browser": "^0.2.1",
     "firebase": "^12.17.0",
     "framer-motion": "^11.11.17",
+    "heic-to": "^1.6.7",
     "jose": "^6.2.7",
     "pdfjs-dist": "^6.2.108",
     "qrcode.react": "^4.2.0",

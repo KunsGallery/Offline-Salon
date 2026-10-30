@@ -73,19 +73,33 @@ async function requestMediaAction(payload, requestedUser = null) {
   return result;
 }
 
-function uploadToSignedUrl(signed, file, onProgress) {
+async function uploadToSignedUrl(signed, file, onProgress) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await uploadAttempt(signed, file, onProgress);
+    } catch (error) {
+      if (!error.retryable || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+      onProgress?.(0);
+    }
+  }
+}
+
+function uploadAttempt(signed, file, onProgress) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('PUT', signed.uploadUrl);
+    request.timeout = 60000;
     Object.entries(signed.headers || {}).forEach(([key, value]) => request.setRequestHeader(key, value));
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) resolve();
-      else reject(new Error(`R2 업로드가 거부되었습니다. (${request.status}) CORS와 API 토큰 권한을 확인해 주세요.`));
+      else reject(Object.assign(new Error(`사진 전송을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요. (${request.status})`), { retryable: request.status === 408 || request.status === 429 || request.status >= 500 }));
     };
-    request.onerror = () => reject(new Error('R2에 연결하지 못했습니다. 버킷 CORS와 네트워크를 확인해 주세요.'));
+    request.onerror = () => reject(Object.assign(new Error('연결이 불안정해 사진을 전송하지 못했습니다. Wi-Fi 또는 모바일 데이터를 확인하고 다시 시도해 주세요.'), { retryable: true }));
+    request.ontimeout = () => reject(Object.assign(new Error('사진 전송 시간이 초과됐습니다. 연결 상태를 확인하고 다시 시도해 주세요.'), { retryable: true }));
     request.send(file);
   });
 }
