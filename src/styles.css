@@ -3961,9 +3961,9 @@ button {
 
 /* PEAR PLAY investigation and reveal states */
 .pear-participant-waiting { max-width: 620px; min-height: calc(100dvh - 50px); display: grid; place-items: center; align-content: center; gap: 14px; margin: 0 auto; text-align: center; }
-.pear-participant-waiting h1 { color: #25231f; font-family: var(--display-font); font-size: clamp(2.4rem, 11vw, 4.8rem); line-height: .94; letter-spacing: 0; }
-.pear-participant-waiting p { max-width: 34ch; color: #6e6a5e; font-size: .78rem; line-height: 1.55; }
-.pear-participant-waiting small { color: #8a8473; font-size: .62rem; }
+.pear-participant-waiting h1 { color: #f6edda; font-family: var(--display-font); font-size: clamp(2.4rem, 11vw, 4.8rem); line-height: .94; letter-spacing: 0; }
+.pear-participant-waiting p { max-width: 34ch; color: #d5cab5; font-size: .78rem; line-height: 1.55; }
+.pear-participant-waiting small { color: #d5cab5; font-size: .62rem; }
 .pear-waiting-photo { width: min(70vw, 280px); aspect-ratio: 1; overflow: hidden; margin-top: 6px; border: 8px solid #fffaf0; background: #d9d1b9; box-shadow: 0 14px 30px rgba(55,48,35,.14); transform: rotate(-2deg); }
 .pear-waiting-photo img { width: 100%; height: 100%; object-fit: cover; }
 .pear-artwork-caption { padding: 14px 16px 16px; color: #29251e; background: #fffaf0; }

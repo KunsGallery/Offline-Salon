@@ -188,3 +188,24 @@ describe('pear-play narration', () => {
     assert.equal(outside.status, 400);
   });
 });
+
+test('participants delete only their own R2 photo keys', async () => {
+  const { default: r2Media } = await import('../../netlify/functions/r2-media.mjs');
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const send = S3Client.prototype.send;
+  const deleted = [];
+  Object.assign(process.env, { R2_BUCKET_NAME: 'test', R2_ACCOUNT_ID: 'test', R2_ACCESS_KEY_ID: 'test', R2_SECRET_ACCESS_KEY: 'test' });
+  S3Client.prototype.send = async function (command) { deleted.push(command.input.Key); return {}; };
+  try {
+    const jwt = await token({}, { sub: 'owner' });
+    const remove = (key) => r2Media(new Request(`${SITE}/.netlify/functions/r2-media`, {
+      method: 'POST', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'delete-participant-photo', key }),
+    }));
+    assert.equal((await remove('sessions/s1/pear/other/p1/photo.jpg')).status, 403);
+    assert.equal((await remove('sessions/s1/artworks/owner/p1/photo.jpg')).status, 403);
+    assert.equal((await remove('sessions/s1/pear/owner/../photo.jpg')).status, 403);
+    assert.equal((await remove('sessions/s1/pear/owner/p1/photo.jpg')).status, 200);
+    assert.deepEqual(deleted, ['sessions/s1/pear/owner/p1/photo.jpg']);
+  } finally { S3Client.prototype.send = send; }
+});

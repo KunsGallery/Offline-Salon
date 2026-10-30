@@ -97,7 +97,7 @@ service cloud.firestore {
           let before = resource.data.get('pearPairing', null);
           let after = request.resource.data.get('pearPairing', null);
           return after == before
-            || ((before == null || before.status == 'error') && uploadedPearPairing(after));
+            || (after != null && uploadedPearPairing(after));
         }
 
         allow read: if true;

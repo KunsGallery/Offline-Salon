@@ -257,7 +257,7 @@ test('submitted participant cannot replace the photo and sees Detective P during
   await expect(page.locator('.pear-investigation-mobile .pear-detective-mark')).toHaveCount(0);
 });
 
-test('submitted photo remains read-only while waiting for host', async ({ page }) => {
+test('submitted photo can be replaced while waiting for host', async ({ page }) => {
   await page.addInitScript(({ key, value }) => {
     localStorage.setItem(key, JSON.stringify(value));
     localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
@@ -266,7 +266,19 @@ test('submitted photo remains read-only while waiting for host', async ({ page }
   await page.goto('/client/session_pear_remote');
   await expect(page.getByRole('heading', { name: /사진이 사건 보관함에/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /다른 사진|새 사진|사진 접수하기/ })).toHaveCount(0);
-  await expect(page.locator('.pear-participant-waiting')).toContainText('접수된 사진은 변경할 수 없습니다');
+  await expect(page.getByRole('button', { name: '사진 교체하기', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '사진 교체하기', exact: true }).click();
+  await page.locator('.pear-upload-panel input[type=file]').first().setInputFiles('public/pear-play/envelope-open-original.webp');
+  await page.getByRole('button', { name: '사진 교체 접수하기', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /사진이 사건 보관함에/ })).toBeVisible();
+  const pairing = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).sessions.session_pear_remote.participants.guest_one.pearPairing, STORAGE_KEY);
+  expect(pairing.photoUrl).toMatch(/^blob:/);
+  expect(pairing.status).toBe('uploaded');
+  expect(pairing.finalArtwork).toBeNull();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/tmp/salon-replace-mobile.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: '/tmp/salon-replace-desktop.png' });
 });
 
 test('photo intake shows progress and locks the accepted upload', async ({ page }) => {
@@ -377,4 +389,20 @@ test('host narrates the photo with typed captions, a lens and clue slips, then r
   await expect(subtitles.locator('[aria-label="검색 · 혼자 커피 마시는 여인 그림"]')).toBeVisible({ timeout: 15000 });
   await expect(subtitles).toContainText('실제 검색어');
   await expect(page.locator('.detective-clue')).toHaveCount(2);
+});
+
+
+test('missing artwork image recovers from its source page', async ({ page }) => {
+  const state = pearSession();
+  const participant = state.sessions.session_pear_remote.participants.guest_one;
+  participant.pearPairing.status = 'ready';
+  participant.pearPairing.finalArtwork = { title: 'Test artwork', artist: 'Artist', imageUrl: '', sourceUrl: 'https://www.metmuseum.org/art/collection/search/1' };
+  await page.route('**/.netlify/functions/artwork-image', (route) => route.fulfill({ json: { imageUrl: '/pear-play/envelope-open-original.webp' } }));
+  await page.addInitScript(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('offline-salon:participantId:session_pear_remote', 'guest_one');
+    localStorage.setItem('offline-salon:nickname:session_pear_remote', '호야');
+  }, { key: STORAGE_KEY, value: state });
+  await page.goto('/client/session_pear_remote');
+  await expect(page.locator('.pear-pair-artwork img')).toBeVisible();
 });

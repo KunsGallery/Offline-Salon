@@ -16,7 +16,7 @@ import { ArtworkParticipantView, ImageParticipantView, PdfParticipantView, Resul
 import { sessionThemeStyle } from '../lib/colorPalette';
 import { ExhibitionGrapeParticipantView } from '../components/activities/ExhibitionGrapeViews';
 import { PearPlayParticipantView } from '../components/activities/PearPlayViews';
-import { uploadParticipantPhoto } from '../lib/media';
+import { uploadParticipantPhoto, removeParticipantPhoto } from '../lib/media';
 import { prepareParticipantPhoto } from '../lib/participantPhoto';
 import { hasSessionModule } from '../lib/sessionModules';
 import { avatarForSession } from '../lib/avatar';
@@ -263,11 +263,13 @@ export default function ParticipantApp() {
     const now = new Date().toISOString();
     let photoUrl = previous?.photoUrl || '';
     let photoPath = previous?.photoPath || null;
+    let newPhotoPath = null;
     if (selection.photoFile) {
       const prepared = await prepareParticipantPhoto(selection.photoFile);
-      const uploaded = await uploadParticipantPhoto(sessionId, selectionId, prepared);
+      const uploaded = await uploadParticipantPhoto(sessionId, createId('grape-photo'), prepared);
       photoUrl = uploaded.url;
       photoPath = uploaded.path;
+      newPhotoPath = uploaded.path;
     }
     if (!photoUrl) throw new Error('전시에서 찍은 사진을 선택해 주세요.');
     const grapeSelections = {
@@ -293,31 +295,46 @@ export default function ParticipantApp() {
         updatedAt: now,
       },
     };
-    await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, { nickname, grapeSelections }));
+    try {
+      await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, { nickname, grapeSelections }));
+    } catch (error) {
+      await removeParticipantPhoto(newPhotoPath).catch(console.error);
+      throw error;
+    }
+    if (previous?.photoPath && previous.photoPath !== photoPath) await removeParticipantPhoto(previous.photoPath);
   };
 
   const handleSavePearPairing = async (file, onProgress) => {
-    if (participant?.pearPairing?.photoUrl) throw new Error('이미 접수된 사진은 변경할 수 없습니다.');
+    const previousPath = participant?.pearPairing?.photoPath;
+    if (session.stage?.pearParticipantId === participantId && session.stage?.pearPhase === 'investigating') throw new Error('조사가 끝난 뒤 사진을 교체해 주세요.');
     const pairingId = createId('pear');
     const uploaded = await uploadParticipantPhoto(sessionId, pairingId, file, { activity: 'pear', onProgress });
     onProgress?.(100);
-    await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, {
-      nickname,
-      pearPairing: {
-        status: 'uploaded',
-        photoUrl: uploaded.url,
-        photoPath: uploaded.path || null,
-        analysis: null,
-        candidates: [],
-        finalArtwork: null,
-        connection: '',
-        statement: '',
-        keywords: [],
-        error: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    }));
+    try {
+      await Promise.resolve(realtime.upsertParticipant(sessionId, participantId, {
+        nickname,
+        pearPairing: {
+          status: 'uploaded',
+          photoUrl: uploaded.url,
+          photoPath: uploaded.path || null,
+          analysis: null,
+          candidates: [],
+          finalArtwork: null,
+          connection: '',
+          statement: '',
+          keywords: [],
+          error: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+    } catch (error) {
+      await removeParticipantPhoto(uploaded.path).catch(console.error);
+      throw error;
+    }
+    if (previousPath && previousPath !== uploaded.path) {
+      await removeParticipantPhoto(previousPath);
+    }
   };
 
   if (!participantId || !nickname || isEditingAvatar || (!participantsLoading && !participant)) {

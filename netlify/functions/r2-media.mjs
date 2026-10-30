@@ -86,6 +86,18 @@ export default async function handler(request) {
 
   try {
     const input = await request.json();
+    if (input.action === 'delete-participant-photo') {
+      const user = await requireFirebaseUser(request);
+      const key = String(input.key || '');
+      const parts = key.split('/');
+      if (parts.length !== 6 || parts[0] !== 'sessions' || !['grape', 'pear'].includes(parts[2])
+          || parts[3] !== safePart(user.sub, 'participant') || parts[5] !== 'photo.jpg'
+          || parts.some((part) => !/^[a-zA-Z0-9._-]+$/.test(part) || part === '.' || part === '..')) {
+        throw Object.assign(new Error('본인이 올린 사진만 삭제할 수 있습니다.'), { status: 403, code: 'INVALID_PARTICIPANT_KEY' });
+      }
+      await r2Client().send(new DeleteObjectCommand({ Bucket: required('R2_BUCKET_NAME'), Key: key }));
+      return json(200, { ok: true }, origin);
+    }
     if (input.action === 'sign-participant-upload') {
       const user = await requireFirebaseUser(request);
       const bytes = Number(input.size || 0);

@@ -115,11 +115,11 @@ describe('participants', () => {
     createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:00:00.000Z',
   };
 
-  test('participant hands in one PEAR photo but cannot forge results', async () => {
+  test('participant can replace a PEAR photo but cannot forge results', async () => {
     const ref = doc(alice(), `${SESSION}/participants/p-alice`);
     await assertFails(setDoc(ref, { lastSeenAt: serverTimestamp(), uid: 'alice', pearPairing: { ...uploaded, status: 'ready', finalArtwork: { title: 'Fake' } } }, { merge: true }));
     await assertSucceeds(setDoc(ref, { lastSeenAt: serverTimestamp(), uid: 'alice', nickname: 'Alice', pearPairing: uploaded }, { merge: true }));
-    await assertFails(setDoc(ref, { lastSeenAt: serverTimestamp(), uid: 'alice', pearPairing: { ...uploaded, photoUrl: 'https://assets.example.com/sessions/s1/pear/p/other.jpg' } }, { merge: true }));
+    await assertSucceeds(setDoc(ref, { lastSeenAt: serverTimestamp(), uid: 'alice', pearPairing: { ...uploaded, photoUrl: 'https://assets.example.com/sessions/s1/pear/p/other.jpg' } }, { merge: true }));
   });
 
   test('admin records the analysis and the owner can still check in', async () => {

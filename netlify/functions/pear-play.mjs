@@ -192,7 +192,7 @@ export default async function handler(request) {
         input: [{
           role: 'user',
           content: [
-            { type: 'input_text', text: `당신은 토끼 탐정입니다. 사진의 사물, 색, 구도, 분위기를 살펴 실제 미술 작품과 연결하세요. 웹 검색으로 작품의 존재와 작가, 제목, 연도, 크기, 재료, 공개 이미지와 출처를 확인하세요. 확인되지 않은 정보나 URL은 만들지 말고 빈 문자열로 남기세요. 검색은 관련성 높은 후보에 집중하고, 아래 JSON만 간결한 한국어로 출력하세요.
+            { type: 'input_text', text: `당신은 토끼 탐정입니다. 사진의 사물, 색, 구도, 분위기를 살펴 실제 미술 작품과 연결하세요. 웹 검색으로 작품의 존재와 작가, 제목, 연도, 크기, 재료, 공개 이미지와 출처를 확인하세요. 확인되지 않은 정보나 URL은 만들지 말고 빈 문자열로 남기세요. 작품 출처는 작품 상세 페이지를 사용하고, imageUrl은 HTML 페이지 주소가 아니라 실제 이미지 파일 주소로 확인하세요. 가능하면 미술관 공개 컬렉션이나 위키미디어의 표시 가능한 이미지를 가진 작품을 우선하세요. 검색은 관련성 높은 후보에 집중하고, 아래 JSON만 간결한 한국어로 출력하세요.
 {
   "analysis": {"objects": [], "colors": [], "composition": [], "mood": "", "context": [], "concept": []},
   "candidates": [{"id":"", "title":"", "artist":"", "year":"", "dimensions":"", "materials":"", "imageUrl":"", "sourceUrl":"", "sourceName":"", "reason":"", "rejected":false}],

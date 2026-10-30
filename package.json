@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "pretest:e2e": "npm run prepare:pdfjs",
     "test:e2e": "playwright test",
-    "test:functions": "node --test tests/functions/functions.mjs",
+    "test:functions": "node --test tests/functions/*.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project demo-offline-salon \"node --test --test-concurrency=1 --import ./tests/adapter/register.mjs tests/rules/firestore-rules.mjs tests/adapter/firestore-adapter.mjs\""
   },
   "dependencies": {

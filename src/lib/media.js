@@ -28,6 +28,7 @@ export async function uploadMedia(sessionId, category, id, file, filename, metad
 export async function uploadParticipantPhoto(sessionId, id, file, metadata = {}) {
   if (mode !== 'firestore') return { url: localUrl(file), path: null };
   const user = await ensureParticipantUser();
+  await cleanupParticipantPhotos(user);
   const signed = await requestMediaAction({
     action: 'sign-participant-upload',
     sessionId,
@@ -102,4 +103,36 @@ function uploadAttempt(signed, file, onProgress) {
     request.ontimeout = () => reject(Object.assign(new Error('사진 전송 시간이 초과됐습니다. 연결 상태를 확인하고 다시 시도해 주세요.'), { retryable: true }));
     request.send(file);
   });
+}
+
+async function deleteParticipantObject(path, user) {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await requestMediaAction({ action: 'delete-participant-photo', key: path }, user); }
+    catch (error) {
+      if (attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+}
+
+// Keep failed cleanups across reloads; retry on the next photo upload.
+async function cleanupParticipantPhotos(user, addedPath) {
+  const key = `offline-salon:photo-cleanup:${user.uid}`;
+  let pending = [];
+  try { pending = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* storage unavailable */ }
+  pending = [...new Set([...(Array.isArray(pending) ? pending : []), ...(addedPath ? [addedPath] : [])])];
+  const persist = () => { try { localStorage.setItem(key, JSON.stringify(pending)); } catch { /* private browsing */ } };
+  persist();
+  for (const path of [...pending]) {
+    try {
+      await deleteParticipantObject(path, user);
+      pending = pending.filter((item) => item !== path);
+      persist();
+    } catch (error) { console.error('[photo cleanup] will retry on next upload', error); }
+  }
+}
+
+export async function removeParticipantPhoto(path) {
+  if (!path || mode !== 'firestore') return;
+  await cleanupParticipantPhotos(await ensureParticipantUser(), path);
 }

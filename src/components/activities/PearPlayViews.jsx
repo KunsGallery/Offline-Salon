@@ -43,11 +43,31 @@ function ArtworkCaption({ artwork, compact = false }) {
   </div>;
 }
 
+function ArtworkImage({ artwork }) {
+  const [url, setUrl] = useState(artwork?.imageUrl || '');
+  const [failed, setFailed] = useState(false);
+  const attempted = useRef(false);
+  useEffect(() => {
+    if ((url && !failed) || attempted.current || !artwork?.sourceUrl) return;
+    attempted.current = true;
+    fetch('/.netlify/functions/artwork-image', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sourceUrl: artwork.sourceUrl }),
+    }).then((response) => response.json()).then((result) => {
+      if (result.imageUrl && result.imageUrl !== url) {
+        setUrl(result.imageUrl); setFailed(false);
+      }
+    }).catch(() => {});
+  }, [url, failed, artwork?.sourceUrl]);
+  if (url && !failed) return <img src={url} referrerPolicy="no-referrer" alt={artwork?.title || '작품'} onError={() => setFailed(true)} />;
+  return <div className="pear-artwork-missing">작품 이미지를 표시할 수 없습니다.{artwork?.sourceUrl ? <a href={artwork.sourceUrl} target="_blank" rel="noreferrer">작품 출처에서 보기 ↗</a> : null}</div>;
+}
+
 function PairArtwork({ pairing, compact = false }) {
   const artwork = pairing?.finalArtwork;
   if (!artwork) return <div className="pear-artwork-missing">검증된 작품 이미지를 준비하고 있어요.</div>;
   return <article className={`pear-pair-artwork ${compact ? 'compact' : ''}`}>
-    {artwork.imageUrl ? <img src={artwork.imageUrl} alt={`${artwork.artist}의 ${artwork.title}`} /> : <div className="pear-artwork-missing">작품 이미지 없음</div>}
+    <ArtworkImage key={`${artwork.imageUrl}-${artwork.sourceUrl}`} artwork={artwork} />
     <ArtworkCaption artwork={artwork} compact={compact} />
   </article>;
 }
@@ -96,6 +116,7 @@ export function PearPlayParticipantView({ session, participants = [], participan
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [receipt, setReceipt] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const [error, setError] = useState('');
   const receiptTimer = useRef(null);
   const pairing = participant?.pearPairing;
@@ -111,7 +132,7 @@ export function PearPlayParticipantView({ session, participants = [], participan
   }, [preview]);
 
   const choosePhoto = (event) => {
-    if (pairing?.photoUrl || busy) return;
+    if (busy) return;
     const nextFile = event.target.files?.[0];
     if (!nextFile) return;
     if (preview.startsWith('blob:')) URL.revokeObjectURL(preview);
@@ -122,7 +143,7 @@ export function PearPlayParticipantView({ session, participants = [], participan
   };
 
   const submit = async () => {
-    if (pairing?.photoUrl) { setError('이미 접수된 사진은 변경할 수 없습니다.'); return; }
+
     if (!file) { setError('사건으로 조사할 사진 한 장을 골라 주세요.'); return; }
     setBusy(true);
     setUploadProgress(null);
@@ -130,6 +151,7 @@ export function PearPlayParticipantView({ session, participants = [], participan
     try {
       const prepared = await prepareParticipantPhoto(file);
       await onSubmit(prepared, setUploadProgress);
+      setReplacing(false);
       setReceipt(true);
       receiptTimer.current = window.setTimeout(() => {
         if (preview.startsWith('blob:')) URL.revokeObjectURL(preview);
@@ -149,22 +171,22 @@ export function PearPlayParticipantView({ session, participants = [], participan
   if (receipt) return <main className="pear-participant-view"><EnvelopeScene preview={preview} status="accepted" /></main>;
 
   const prepared = preparedPearCase(session);
-  if (stage.mode === 'pear-play' && stage.pearView === 'case' && prepared) {
+  if (!replacing && stage.mode === 'pear-play' && stage.pearView === 'case' && prepared) {
     if (stage.pearPhase === 'artwork-only') return <main className="pear-participant-view pear-reverse-mobile"><h1>이 작품은 어떤 사진에서 시작됐을까요?</h1><PairArtwork pairing={prepared.pearPairing} /><p>호스트 화면을 함께 보며 떠오르는 장면을 이야기해 보세요.</p></main>;
     if (stage.pearPhase === 'connection') return <PearPlayResultView participant={prepared} pairing={prepared.pearPairing} isShared />;
     return <main className="pear-participant-view pear-reverse-mobile"><h1>사진과 작품의 연결</h1><section className="pear-result-pair"><figure><img src={prepared.pearPairing.photoUrl} alt="원본 사진" /><figcaption>원본 사진</figcaption></figure><strong>×</strong><PairArtwork pairing={prepared.pearPairing} /></section></main>;
   }
 
-  if (hasSharedCase) {
-    if (selectedPairing.status === 'ready' && ['found', 'revealed', 'connection'].includes(stage.pearPhase)) return <PearPlayResultView participant={selectedParticipant} pairing={selectedPairing} isShared={selectedParticipant.participantId !== participant?.participantId} />;
+  if (!replacing && hasSharedCase) {
+    if (selectedPairing.status === 'ready' && ['found', 'revealed', 'connection'].includes(stage.pearPhase)) return <><PearPlayResultView participant={selectedParticipant} pairing={selectedPairing} isShared={selectedParticipant.participantId !== participant?.participantId} />{selectedParticipant.participantId === participant?.participantId ? <button className="pear-submit-button" onClick={() => setReplacing(true)}>사진 교체하기</button> : null}</>;
     return <SharedPearPlayView participant={selectedParticipant} pairing={selectedPairing} phase={stage.pearPhase || 'photo'} investigationStep={stage.pearInvestigationStep} investigationClue={stage.pearInvestigationClue} investigationNotes={stage.pearInvestigationNotes} investigationQueries={stage.pearInvestigationQueries} isMine={selectedParticipant.participantId === participant?.participantId} />;
   }
 
-  if (waitingForHost) return <main className="pear-participant-view"><section className="pear-participant-waiting"><div className="pear-detective-mark">R</div><span className="pear-case-label">PHOTO RECEIVED</span><h1>사진이 사건 보관함에<br />도착했어요.</h1><p>호스트가 한 장면을 고르면 토끼 탐정이 추리를 시작합니다.</p><div className="pear-waiting-photo"><img src={pairing.photoUrl} alt="접수된 사진" /></div><small>접수된 사진은 변경할 수 없습니다. 앞 화면에서 사건이 열릴 때 함께 조사해 주세요.</small>{onEditAvatar ? <button className="pear-avatar-edit-button" type="button" onClick={onEditAvatar}><SalonAvatar avatar={participant.avatar} compact /><span>내 캐릭터 수정</span></button> : null}</section></main>;
+  if (!replacing && waitingForHost) return <main className="pear-participant-view"><section className="pear-participant-waiting"><div className="pear-detective-mark">R</div><span className="pear-case-label">PHOTO RECEIVED</span><h1>사진이 사건 보관함에<br />도착했어요.</h1><p>호스트가 한 장면을 고르면 토끼 탐정이 추리를 시작합니다.</p><div className="pear-waiting-photo"><img src={pairing.photoUrl} alt="접수된 사진" /></div><small>새 사진을 접수하면 이전 사진과 조사 결과가 교체됩니다.</small>{pairing.status !== 'investigating' ? <button className="pear-submit-button" onClick={() => setReplacing(true)}>사진 교체하기</button> : null}{onEditAvatar ? <button className="pear-avatar-edit-button" type="button" onClick={onEditAvatar}><SalonAvatar avatar={participant.avatar} compact /><span>내 캐릭터 수정</span></button> : null}</section></main>;
 
-  if (pairing?.photoUrl) return <PearPlayResultView participant={participant} pairing={pairing} />;
+  if (!replacing && pairing?.photoUrl) return <><PearPlayResultView participant={participant} pairing={pairing} /><button className="pear-submit-button" onClick={() => setReplacing(true)}>사진 교체하기</button></>;
 
-  return <main className="pear-participant-view"><header className="pear-participant-header"><div><span className="pear-case-label">PEAR PLAY · PRIVATE CASE</span><h1>평범한 사진에<br />사건을 열어보세요.</h1><p>최근 좋아했거나 이상하게 마음에 남은 사진 한 장을 접수해 주세요.</p></div>{onEditAvatar ? <button className="pear-avatar-edit-button" type="button" onClick={onEditAvatar}><SalonAvatar avatar={participant.avatar} compact /><span>내 캐릭터 수정</span></button> : <strong>221B<br />RIENZI AGENCY</strong>}</header><section className="pear-upload-panel"><EnvelopeScene preview={preview} /><div className="pear-upload-actions"><button type="button" onClick={() => galleryInput.current?.click()}>갤러리에서 선택</button><button type="button" onClick={() => cameraInput.current?.click()}>지금 촬영</button></div><input ref={galleryInput} type="file" accept="image/*" onChange={choosePhoto} /><input ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={choosePhoto} /><p className="pear-upload-note">사진은 호스트의 사건 보드에 도착한 뒤, 선택된 장면만 Detective P가 조사합니다. 접수 후에는 변경할 수 없습니다.</p><button className="pear-submit-button" type="button" disabled={!file} onClick={submit}>사진 접수하기</button>{error ? <p className="pear-error" role="alert">{error}</p> : null}</section></main>;
+  return <main className="pear-participant-view"><header className="pear-participant-header"><div><span className="pear-case-label">PEAR PLAY · PRIVATE CASE</span><h1>평범한 사진에<br />사건을 열어보세요.</h1><p>최근 좋아했거나 이상하게 마음에 남은 사진 한 장을 접수해 주세요.</p></div>{onEditAvatar ? <button className="pear-avatar-edit-button" type="button" onClick={onEditAvatar}><SalonAvatar avatar={participant.avatar} compact /><span>내 캐릭터 수정</span></button> : <strong>221B<br />RIENZI AGENCY</strong>}</header><section className="pear-upload-panel"><EnvelopeScene preview={preview} /><div className="pear-upload-actions"><button type="button" onClick={() => galleryInput.current?.click()}>갤러리에서 선택</button><button type="button" onClick={() => cameraInput.current?.click()}>지금 촬영</button></div><input ref={galleryInput} type="file" accept="image/*" onChange={choosePhoto} /><input ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={choosePhoto} /><p className="pear-upload-note">사진은 호스트의 사건 보드에 도착한 뒤, 선택된 장면만 Detective P가 조사합니다. 새 사진을 접수하면 이전 사진은 삭제됩니다.</p><button className="pear-submit-button" type="button" disabled={!file} onClick={submit}>{replacing ? '사진 교체 접수하기' : '사진 접수하기'}</button>{replacing ? <button className="pear-avatar-edit-button" onClick={() => setReplacing(false)}>교체 취소</button> : null}{error ? <p className="pear-error" role="alert">{error}</p> : null}</section></main>;
 }
 
 function phaseLabel(phase) {
@@ -191,7 +213,7 @@ function HostFoundView({ pairing }) {
   const artwork = pairing?.finalArtwork;
   if (!artwork?.imageUrl) return <div className="pear-host-found"><span className="pear-case-label">ARTWORK FOUND</span><h2>작품을 찾았습니다.</h2><p>검증된 작품 이미지를 준비하고 있어요.</p></div>;
   const metadata = [artwork.artist, artwork.year].filter(Boolean).join(' · ');
-  return <section className="pear-host-found-cinematic" aria-live="polite"><div className="pear-found-pair" aria-label="접수 사진과 찾은 작품 비교"><figure><div className="pear-found-image"><div className="pear-found-sheet"><img src={pairing.photoUrl} alt="참여자가 접수한 사진" /></div></div><figcaption>접수 사진</figcaption></figure><figure><div className="pear-found-image"><div className="pear-found-sheet"><img src={artwork.imageUrl} alt={`${artwork.artist || '작가 미상'}의 ${artwork.title || '작품'}`} /></div></div><figcaption>찾은 작품</figcaption></figure></div><div className="pear-investigation-subtitles pear-artwork-found-copy"><p>ARTWORK FOUND</p><h2>{artwork.title || '검증된 작품을 찾았습니다.'}</h2><span>{metadata || '작품 정보를 확인하고 있어요.'}</span></div></section>;
+  return <section className="pear-host-found-cinematic" aria-live="polite"><div className="pear-found-pair" aria-label="접수 사진과 찾은 작품 비교"><figure><div className="pear-found-image"><div className="pear-found-sheet"><img src={pairing.photoUrl} alt="참여자가 접수한 사진" /></div></div><figcaption>접수 사진</figcaption></figure><figure><div className="pear-found-image"><div className="pear-found-sheet"><ArtworkImage key={`${artwork.imageUrl}-${artwork.sourceUrl}`} artwork={artwork} /></div></div><figcaption>찾은 작품</figcaption></figure></div><div className="pear-investigation-subtitles pear-artwork-found-copy"><p>ARTWORK FOUND</p><h2>{artwork.title || '검증된 작품을 찾았습니다.'}</h2><span>{metadata || '작품 정보를 확인하고 있어요.'}</span></div></section>;
 }
 
 function EvidenceWall({ participants = [], currentId = '', pinnedIds, pinningId, landedId }) {
@@ -225,7 +247,7 @@ function HostPairBoardView({ current, pairing, phase }) {
   return <section className={`pear-host-pair-board ${showConnection ? 'is-connecting' : ''}`} aria-label="접수 사진과 찾은 작품">
     <div className="pear-board-pair">
       <figure className="pear-board-photo"><div className="pear-board-image"><img src={pairing.photoUrl} alt={`${current.nickname || '참가자'}의 접수 사진`} /></div><figcaption><span>접수 사진</span><strong>{current.nickname || '익명'}</strong></figcaption></figure>
-      <figure className="pear-board-artwork"><div className="pear-board-image">{artwork?.imageUrl ? <img src={artwork.imageUrl} alt={`${artwork.artist || '작가 미상'}의 ${artwork.title || '작품'}`} /> : <span>작품 이미지를 확인하고 있어요.</span>}</div><figcaption><span>찾은 작품</span><strong>{artwork?.title || '작품 정보 확인 중'}</strong><small>{[artwork?.artist, artwork?.year].filter(Boolean).join(' · ')}</small>{artwork?.dimensions || artwork?.materials ? <small>{[artwork.dimensions, artwork.materials].filter(Boolean).join(' · ')}</small> : null}</figcaption></figure>
+      <figure className="pear-board-artwork"><div className="pear-board-image">{artwork?.imageUrl ? <ArtworkImage key={`${artwork.imageUrl}-${artwork.sourceUrl}`} artwork={artwork} /> : <span>작품 이미지를 확인하고 있어요.</span>}</div><figcaption><span>찾은 작품</span><strong>{artwork?.title || '작품 정보 확인 중'}</strong><small>{[artwork?.artist, artwork?.year].filter(Boolean).join(' · ')}</small>{artwork?.dimensions || artwork?.materials ? <small>{[artwork.dimensions, artwork.materials].filter(Boolean).join(' · ')}</small> : null}</figcaption></figure>
     </div>
     {showConnection ? <div className="pear-board-map" aria-live="polite">
       <div className="pear-board-map-nodes">
