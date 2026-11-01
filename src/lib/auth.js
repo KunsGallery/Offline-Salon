@@ -7,10 +7,11 @@ import {
   signInWithRedirect,
   signOut,
 } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth, firebaseInitializationError, missingFirebaseConfig } from './firebase';
 
 export const authUnavailableMessage =
-  'Firebase Auth is unavailable. Check VITE_FIREBASE_* env vars and VITE_REALTIME_MODE=firestore.';
+  firebaseInitializationError?.message
+  || `Firebase 로그인 설정을 확인해 주세요. 누락된 설정: ${missingFirebaseConfig.join(', ') || '인증 초기화'}`;
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({
@@ -56,12 +57,10 @@ export async function loginWithGoogle() {
   try {
     return await signInWithPopup(auth, provider);
   } catch (error) {
-    console.warn('[auth] popup login failed, fallback to redirect', error);
+    console.warn('[auth] popup login failed', error);
 
     if (
       error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/popup-closed-by-user' ||
-      error?.code === 'auth/cancelled-popup-request' ||
       error?.code === 'auth/operation-not-supported-in-this-environment' ||
       error?.code === 'auth/web-storage-unsupported'
     ) {

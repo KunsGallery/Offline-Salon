@@ -3,6 +3,7 @@ import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
   browserSessionPersistence,
+  inMemoryPersistence,
   getAuth,
   initializeAuth,
 } from 'firebase/auth';
@@ -16,23 +17,34 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const hasCredentials = Object.values(firebaseConfig).every(Boolean);
+export const missingFirebaseConfig = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value).map(([key]) => key);
 
-export const app = hasCredentials
-  ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
-  : null;
-
-function createAuth(firebaseApp) {
-  if (!firebaseApp) return null;
-  try {
-    return initializeAuth(firebaseApp, {
-      persistence: [browserLocalPersistence, browserSessionPersistence],
-      popupRedirectResolver: browserPopupRedirectResolver,
-    });
-  } catch {
-    return getAuth(firebaseApp);
+// Initialization must never prevent React from rendering the login/error screen.
+let initializedApp = null;
+let initializedAuth = null;
+let initializedDb = null;
+let initializationError = null;
+try {
+  if (missingFirebaseConfig.length === 0) {
+    initializedApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    try {
+      initializedAuth = initializeAuth(initializedApp, {
+        persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+        popupRedirectResolver: browserPopupRedirectResolver,
+      });
+    } catch (error) {
+      if (error?.code !== 'auth/already-initialized') throw error;
+      initializedAuth = getAuth(initializedApp);
+    }
+    initializedDb = getFirestore(initializedApp);
   }
+} catch (error) {
+  initializationError = error;
+  console.error('[firebase] initialization failed', error);
 }
 
-export const db = app ? getFirestore(app) : null;
-export const auth = createAuth(app);
+export const app = initializedApp;
+export const db = initializedDb;
+export const auth = initializedAuth;
+export const firebaseInitializationError = initializationError;

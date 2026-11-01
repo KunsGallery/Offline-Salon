@@ -28,6 +28,12 @@ export function useAuth() {
     setLoading(true);
     setError(null);
 
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      setLoading(false);
+      setError(new Error('로그인 상태 확인이 지연되고 있습니다. 연결 상태를 확인한 뒤 Google 로그인을 다시 시도해 주세요.'));
+    }, 12000);
+
     (async () => {
       try {
         await handleGoogleRedirectResult();
@@ -41,11 +47,14 @@ export function useAuth() {
     const unsubscribe = subscribeAuth(
       (nextUser) => {
         if (!active) return;
+        window.clearTimeout(timer);
         setUser(nextUser);
+        setError(null);
         setLoading(false);
       },
       (reason) => {
         if (!active) return;
+        window.clearTimeout(timer);
         const nextError = reason instanceof Error ? reason : new Error(String(reason));
         setError(nextError);
         setLoading(false);
@@ -54,6 +63,7 @@ export function useAuth() {
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, []);
@@ -62,6 +72,7 @@ export function useAuth() {
     if (mode !== 'firestore' || !hasFirebaseAuth()) {
       throw new Error(authUnavailableMessage);
     }
+    setError(null);
     return loginWithGoogle();
   };
 

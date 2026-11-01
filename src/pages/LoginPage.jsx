@@ -17,10 +17,10 @@ export default function LoginPage() {
   const returnPath = getReturnPath(location);
 
   useEffect(() => {
-    if (user && mode === 'firestore') {
+    if (user && !user.isAnonymous && !error && mode === 'firestore') {
       navigate(returnPath, { replace: true });
     }
-  }, [navigate, returnPath, user]);
+  }, [error, navigate, returnPath, user]);
 
   const handleGoogleLogin = async () => {
     setSubmitting(true);
